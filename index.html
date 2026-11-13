@@ -1788,12 +1788,12 @@ var DEFAULT_DB = {
       { hi: 290, m: 0.457, aux: 8.9, refLen: 11 },
       { hi: 330, m: 0.562, aux: 11.5, refLen: 10 }
     ],
-    /* 冷轧：m=分/米、feed=进给量 mm/次、rpm=冲次 次/min、auxPM=辅助 分/米 */
+    /* 冷轧：m=分/米定额、feed=进给量 mm/次、rpm=冲次 次/min、aux=辅助 分/支（÷坯管长得 分/米） */
     roll: [
-      { wall: 0, m: 1.638, feed: 7, rpm: 40, auxPM: 3.5 },
-      { wall: 15.1, m: 1.838, feed: 6.5, rpm: 38, auxPM: 4.5 },
-      { wall: 18.1, m: 2.138, feed: 6, rpm: 36, auxPM: 4.5 },
-      { wall: 22.1, m: 2.738, feed: 5, rpm: 34, auxPM: 5 }
+      { wall: 0, m: 1.638, feed: 7, rpm: 40, aux: 3.5 },
+      { wall: 15.1, m: 1.838, feed: 6.5, rpm: 38, aux: 4.5 },
+      { wall: 18.1, m: 2.138, feed: 6, rpm: 36, aux: 4.5 },
+      { wall: 22.1, m: 2.738, feed: 5, rpm: 34, aux: 5 }
     ],
     anneal: 0.18,
     anneal2: 0.18,
@@ -2043,7 +2043,9 @@ var DB = (function () {
             wall: r.wall, m: r.m,
             feed: Number(r.feed) || (f ? Number(f.feed) : 7),
             rpm: Number(r.rpm) || 40,
-            auxPM: Number.isFinite(Number(r.auxPM)) ? Number(r.auxPM) : (f ? Number(f.aux) : 3.5)
+            /* aux 单位是「分/支」；老数据字段名是 auxPM，一并兼容 */
+            aux: Number.isFinite(Number(r.aux)) ? Number(r.aux)
+              : (Number.isFinite(Number(r.auxPM)) ? Number(r.auxPM) : (f ? Number(f.aux) : 3.5))
           };
         });
         L.spotTab = (Array.isArray(L.spotTab) && L.spotTab.length) ? L.spotTab : clone(d.spotTab);
@@ -3691,14 +3693,16 @@ function computeLabor() {
         dec0(L.man.draw) + ' × ' + dec0(rounds.draw) + ' 道'
     });
   }
-  /* 冷轧：按「进给量 mm/次 × 冲次 次/min」算轧制时间，再折每米；辅助 分/米 另加 */
+  /* 冷轧：按「进给量 mm/次 × 冲次 次/min」算轧制时间折每米；辅助是「分/支」，要 ÷ 坯管长 换算成 分/米 */
   if (rollT) {
     var rFeed = Number(rollT.feed) || 7, rRpm = Number(rollT.rpm) || 40;
-    var rAuxPM = Number(rollT.auxPM) || 0;
+    var rAuxPP = Number(rollT.aux) || 0;                      /* 分/支 */
     var rollT2 = (glenUse * 1000) / (rFeed * rRpm) * rounds.roll;
     var rm = len > 0 ? rollT2 / len : 0;
+    var rAuxPM = glenUse > 0 ? rAuxPP / glenUse : 0;          /* 分/支 ÷ 坯管长 = 分/米 */
     out.rollTime = rollT2;
     out.rollPM = rm;
+    out.rollAuxPP = rAuxPP;
     out.rollAuxPM = rAuxPM;
     out.feed = rFeed;
     out.rpm = rRpm;
@@ -3709,7 +3713,8 @@ function computeLabor() {
       machSel: 'roll', rounds: rounds.roll,
       proc: rm, aux: rAuxPM, std: (rm + rAuxPM) * (Number(L.man.roll) || 0) * rounds.roll,
       note: '轧制 ' + dec1(rollT2) + ' 分/支 = ' + dec0(glenUse * 1000) + 'mm ÷(' + dec1(rFeed) + '×' + dec0(rRpm) + ') × ' +
-        dec0(rounds.roll) + ' 道 → ' + dec3(rm) + ' 分/米 ＋ 辅助 ' + dec1(rAuxPM)
+        dec0(rounds.roll) + ' 道 → ' + dec3(rm) + ' 分/米；辅助 ' + dec1(rAuxPP) + ' 分/支 ÷ 坯管 ' + dec2(glenUse) +
+        ' m = ' + dec3(rAuxPM) + ' 分/米'
     });
   }
   /* 退火：源表 =（（2＋成品长）/ 退火速度）/（装炉支数×成品长）× 60 × 人班 */
@@ -3826,7 +3831,8 @@ function renderLabor() {
   });
   if (isRoll()) {
     $('w-note').textContent = '冷轧 进给 ' + dec1(res.feed) + ' mm/次 × ' + dec0(res.rpm) + ' 次/min · 轧制 ' +
-      dec1(res.rollTime) + ' 分/支 → ' + dec3(res.rollPM) + ' 分/米 · 辅助 ' + dec1(res.rollAuxPM) + ' 分/米' +
+      dec1(res.rollTime) + ' 分/支 → ' + dec3(res.rollPM) + ' 分/米 · 辅助 ' + dec1(res.rollAuxPP) + ' 分/支 ÷ 坯管 ' +
+      dec2(res.glen) + ' m = ' + dec3(res.rollAuxPM) + ' 分/米' +
       (res.warn.length ? ' ｜ ' + res.warn.join('；') : '');
   } else {
     var dt = tierHi(Lw.draw, res.f.od, 'hi');
@@ -3963,13 +3969,13 @@ function renderLaborRules() {
 
   /* 2 冷轧工时（进给量/冲次/辅助 已并入本表，不再单列「冷轧送进参数」） */
   h += '<div class="ltab"><h4>冷轧工时（按毛管壁厚分档）</h4>' +
-    '<div class="lfml">轧制 分/米 = 坯管长 ÷（进给量 × 冲次）÷ 成品长；冷轧标准工时 =（轧制 分/米 ＋ 辅助 分/米）× 人班 × 道次</div>' +
-    lHead('40px 62px 66px 62px 62px 62px 24px', ['壁厚≥', '上限 mm', '分/米参考', '进给量 mm', '冲次 次/min', '辅助 分/米', ''], 1) +
+    '<div class="lfml">轧制 分/米 = 坯管长 ÷（进给量 × 冲次）÷ 成品长；辅助 分/米 = 辅助 分/支 ÷ 坯管长；标准工时 =（两者之和）× 人班 × 道次</div>' +
+    lHead('40px 62px 66px 62px 62px 62px 24px', ['壁厚≥', '上限 mm', '分/米参考', '进给量 mm', '冲次 次/min', '辅助 分/支', ''], 1) +
     '<div class="ldraw" style="grid-template-columns:40px 62px 66px 62px 62px 62px 24px;border:0;padding:0">' +
     L.roll.map(function (d, i) {
       return '<span class="lb">壁厚≥</span>' + lNum('roll', i, 'wall', d.wall, '0.1') +
         lNum('roll', i, 'm', d.m, '0.001') + lNum('roll', i, 'feed', d.feed, '0.1') +
-        lNum('roll', i, 'rpm', d.rpm, '1') + lNum('roll', i, 'auxPM', d.auxPM, '0.1') +
+        lNum('roll', i, 'rpm', d.rpm, '1') + lNum('roll', i, 'aux', d.aux, '0.1') +
         lDel('roll', i);
     }).join('') + '</div>' + lAdd('roll', '新增一档') + '</div>';
 
@@ -4233,7 +4239,7 @@ function bindLabor() {
       var key = ad.getAttribute('data-ladd'), arr = DB.labor[key], last = arr[arr.length - 1] || {};
       var nw;
       if (key === 'draw') nw = { hi: (Number(last.hi) || 0) + 30, m: last.m, aux: last.aux, refLen: last.refLen };
-      else if (key === 'roll') nw = { wall: (Number(last.wall) || 0) + 5, m: last.m, feed: last.feed, rpm: last.rpm, auxPM: last.auxPM };
+      else if (key === 'roll') nw = { wall: (Number(last.wall) || 0) + 5, m: last.m, feed: last.feed, rpm: last.rpm, aux: last.aux };
       else if (key === 'partsOD') nw = { od: (Number(last.od) || 0) + 30, parts: last.parts };
       else if (key === 'pickMin') nw = { code: '新牌号', v: last.v, od: last.od || 0, parts: last.parts || 0 };
       else if (key === 'straight') nw = { od: (Number(last.od) || 0) + 30, m: last.m, m2: last.m2 || 0 };
