@@ -3857,18 +3857,22 @@ function computeLabor() {
     proc: 0, aux: Number(L.inspect) / len, std: Number(L.inspect) * (Number(L.man.inspect) || 0) / len,
     note: '按支计，折每米'
   });
-  /* 自动点校：按成品外径查档 → 上班时间×60÷支/班÷成品长（分/米）+ 辅助 分/支÷成品长 */
+  /* 自动点校：标准工时只算加工（上班时间×60÷支/班÷成品长×人班）；
+     辅助时间不进标准工时，改计入【准备工时】（按批摊） */
   var spotRow = tierOf(L.spotTab, f.od, 'od') || { od: 0, parts: 100, aux: 0 };
   var spotParts = Math.max(1, Number(spotRow.parts) || 1);
   var spotAux = Math.max(0, Number(spotRow.aux) || 0);
-  var spotCutPM = (f.shiftH * 60 / spotParts) / len;
+  var spotProc = (f.shiftH * 60 / spotParts) / len;
+  var spotPrepBase = Number(L.prep.spot) || 0;
   add({
     k: 'spot', name: '自动点校', on: !!L.on.spot, man: Number(L.man.spot) || 0,
-    prep: Number(L.prep.spot) || 0,
-    machTxt: 'Φ' + dec0(spotRow.od) + ' 档 · ' + dec0(spotParts) + ' 支/班 · 辅助 ' + dec1(spotAux) + ' 分/支',
-    proc: spotCutPM, aux: spotAux / len, std: (spotCutPM + spotAux / len) * (Number(L.man.spot) || 0),
-    note: '加工 ' + dec1(f.shiftH) + '×60÷' + dec0(spotParts) + '÷' + dec2(len) + ' = ' + dec3(spotCutPM) +
-      '；辅助 ' + dec1(spotAux) + '÷' + dec2(len) + ' = ' + dec3(spotAux / len)
+    prep: spotPrepBase + spotAux,
+    machTxt: 'Φ' + dec0(spotRow.od) + ' 档 · ' + dec0(spotParts) + ' 支/班 · 辅助 ' + dec1(spotAux) + ' 分/支（计入准备）',
+    proc: spotProc, aux: 0, std: spotProc * (Number(L.man.spot) || 0),
+    note: '加工 ' + dec1(f.shiftH) + '×60÷' + dec0(spotParts) + '÷' + dec2(len) + ' × 人班 ' + dec0(L.man.spot) +
+      ' = ' + dec3(spotProc * (Number(L.man.spot) || 0)) + ' 分/米；辅助 ' + dec1(spotAux) +
+      ' 分/支 计入准备工时（准备合计 ' + dec1(spotPrepBase + spotAux) + ' 分/批 ÷ 批支数 ' + dec0(f.batch) +
+      ' 摊回每支）'
   });
 
   var sumPerM = 0, sumPerPart = 0;
@@ -4142,12 +4146,13 @@ function renderLaborRules() {
   var labLen = (S.labor && S.labor.len > 0) ? S.labor.len : ((computeLabor().len) || 0);
   h += '<div class="ltab"><h4>自动点校（按成品外径分档）</h4>' +
     '<div class="lfml">标准工时 分/米 = 上班时间 × 60 ÷ 支/班 ÷ 成品长' +
-      (labLen ? '（' + dec2(labLen) + ' m）' : '（成品长待填）') + ' ＋ 辅助 分/支 ÷ 成品长</div>' +
+      (labLen ? '（' + dec2(labLen) + ' m）' : '（成品长待填）') +
+      '；辅助时间<b>不计入标准工时</b>，计入准备工时（按批摊）</div>' +
     lHead('34px 64px 70px 78px 82px 24px', ['Φ≥', '成品外径', '支/班', '辅助 分/支', '标准工时 分/米', ''], 2) +
     '<div class="ldraw" style="grid-template-columns:34px 64px 70px 78px 82px 24px;border:0;padding:0">' +
     L.spotTab.map(function (d, i) {
-      var p = Math.max(1, Number(d.parts) || 1), ax = Math.max(0, Number(d.aux) || 0);
-      var std = labLen > 0 ? (shiftNow * 60 / p) / labLen + ax / labLen : 0;
+      var p = Math.max(1, Number(d.parts) || 1);
+      var std = labLen > 0 ? (Number(L.shiftH) * 60 / p) / labLen : 0;
       return '<span class="lb">Φ≥</span>' + lNum('spotTab', i, 'od', d.od, '1') +
         lNum('spotTab', i, 'parts', d.parts, '1') + lNum('spotTab', i, 'aux', d.aux, '0.1') +
         '<span class="lc">' + (std ? dec3(std) : '—') + '</span>' + lDel('spotTab', i);
