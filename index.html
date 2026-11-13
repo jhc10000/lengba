@@ -1847,15 +1847,15 @@ var DEFAULT_DB = {
     ],
     inspect: 2.274,
     spot: 0.92,
-    /* 自动点校：按成品外径分档，parts=支/班、aux=辅助时间 分/支
-       （默认值取「≈0.92 分/支」反算，即 11h×60÷720，保持与旧口径一致，按实际改） */
+    /* 自动点校：按成品外径分档，parts=支/班、prep=准备工时 分/批
+       （支/班默认值取「≈0.92 分/支」反算，即 11h×60÷720，保持与旧口径一致，按实际改） */
     spotTab: [
-      { od: 0, parts: 720, aux: 0 },
-      { od: 60, parts: 660, aux: 0 },
-      { od: 90, parts: 600, aux: 0 },
-      { od: 130, parts: 520, aux: 0 },
-      { od: 170, parts: 430, aux: 0 },
-      { od: 210, parts: 360, aux: 0 }
+      { od: 0, parts: 720, prep: 15 },
+      { od: 60, parts: 660, prep: 15 },
+      { od: 90, parts: 600, prep: 15 },
+      { od: 130, parts: 520, prep: 18 },
+      { od: 170, parts: 430, prep: 18 },
+      { od: 210, parts: 360, prep: 20 }
     ],
     /* 火焰 / 激光切割工时：基准速度 v0 @ 基准板厚 t0，板厚指数 k（越大板越厚越慢） */
     cut: {
@@ -2085,7 +2085,14 @@ var DB = (function () {
               : (Number.isFinite(Number(r.auxPM)) ? Number(r.auxPM) : (f ? Number(f.aux) : 3.5))
           };
         });
-        L.spotTab = (Array.isArray(L.spotTab) && L.spotTab.length) ? L.spotTab : clone(d.spotTab);
+        L.spotTab = (Array.isArray(L.spotTab) && L.spotTab.length) ? L.spotTab.map(function (r) {
+          return {
+            od: r.od, parts: r.parts,
+            /* prep=准备工时 分/批；老字段名 aux 一并兼容，都没有就取工序默认准备工时 */
+            prep: Number.isFinite(Number(r.prep)) && r.prep !== null ? Number(r.prep)
+              : (Number(r.aux) > 0 ? Number(r.aux) : (Number((L.prep || {}).spot) || 15))
+          };
+        }) : clone(d.spotTab);
         L.cut = (function (c) {
           var D = clone(d.cut), out = {};
           ['flame', 'laser'].forEach(function (k) {
@@ -3857,22 +3864,20 @@ function computeLabor() {
     proc: 0, aux: Number(L.inspect) / len, std: Number(L.inspect) * (Number(L.man.inspect) || 0) / len,
     note: '按支计，折每米'
   });
-  /* 自动点校：标准工时只算加工（上班时间×60÷支/班÷成品长×人班）；
-     辅助时间不进标准工时，改计入【准备工时】（按批摊） */
-  var spotRow = tierOf(L.spotTab, f.od, 'od') || { od: 0, parts: 100, aux: 0 };
+  /* 自动点校：标准工时只算加工；本行的「准备工时」直接代入工序表的【准备】列（按批摊） */
+  var spotRow = tierOf(L.spotTab, f.od, 'od') || { od: 0, parts: 100, prep: 0 };
   var spotParts = Math.max(1, Number(spotRow.parts) || 1);
-  var spotAux = Math.max(0, Number(spotRow.aux) || 0);
+  var spotPrepRow = Math.max(0, Number(spotRow.prep) || 0);
   var spotProc = (f.shiftH * 60 / spotParts) / len;
-  var spotPrepBase = Number(L.prep.spot) || 0;
+  var spotPrep = spotPrepRow > 0 ? spotPrepRow : (Number(L.prep.spot) || 0);   /* 本行没填就用默认准备工时 */
   add({
     k: 'spot', name: '自动点校', on: !!L.on.spot, man: Number(L.man.spot) || 0,
-    prep: spotPrepBase + spotAux,
-    machTxt: 'Φ' + dec0(spotRow.od) + ' 档 · ' + dec0(spotParts) + ' 支/班 · 辅助 ' + dec1(spotAux) + ' 分/支（计入准备）',
+    prep: spotPrep,
+    machTxt: 'Φ' + dec0(spotRow.od) + ' 档 · ' + dec0(spotParts) + ' 支/班 · 准备 ' + dec1(spotPrep) + ' 分/批',
     proc: spotProc, aux: 0, std: spotProc * (Number(L.man.spot) || 0),
-    note: '加工 ' + dec1(f.shiftH) + '×60÷' + dec0(spotParts) + '÷' + dec2(len) + ' × 人班 ' + dec0(L.man.spot) +
-      ' = ' + dec3(spotProc * (Number(L.man.spot) || 0)) + ' 分/米；辅助 ' + dec1(spotAux) +
-      ' 分/支 计入准备工时（准备合计 ' + dec1(spotPrepBase + spotAux) + ' 分/批 ÷ 批支数 ' + dec0(f.batch) +
-      ' 摊回每支）'
+    note: '标准工时 ' + dec1(f.shiftH) + '×60÷' + dec0(spotParts) + '÷' + dec2(len) + ' × 人班 ' + dec0(L.man.spot) +
+      ' = ' + dec3(spotProc * (Number(L.man.spot) || 0)) + ' 分/米；准备工时 ' + dec1(spotPrep) + ' 分/批 ÷ 批支数 ' +
+      dec0(f.batch) + ' = ' + dec3(spotPrep / (Number(f.batch) || 1)) + ' 分/支'
   });
 
   var sumPerM = 0, sumPerPart = 0;
@@ -4147,14 +4152,16 @@ function renderLaborRules() {
   h += '<div class="ltab"><h4>自动点校（按成品外径分档）</h4>' +
     '<div class="lfml">标准工时 分/米 = 上班时间 × 60 ÷ 支/班 ÷ 成品长' +
       (labLen ? '（' + dec2(labLen) + ' m）' : '（成品长待填）') +
-      '；辅助时间<b>不计入标准工时</b>，计入准备工时（按批摊）</div>' +
-    lHead('34px 64px 70px 78px 82px 24px', ['Φ≥', '成品外径', '支/班', '辅助 分/支', '标准工时 分/米', ''], 2) +
-    '<div class="ldraw" style="grid-template-columns:34px 64px 70px 78px 82px 24px;border:0;padding:0">' +
+      '；本行「准备工时」直接代入工序表的【准备】列（÷ 批支数摊回每支）</div>' +
+    lHead('34px 64px 70px 82px 82px 24px', ['Φ≥', '成品外径', '支/班', '准备工时 分/批', '标准工时 分/米', ''], 2) +
+    '<div class="ldraw" style="grid-template-columns:34px 64px 70px 82px 82px 24px;border:0;padding:0">' +
     L.spotTab.map(function (d, i) {
       var p = Math.max(1, Number(d.parts) || 1);
       var std = labLen > 0 ? (Number(L.shiftH) * 60 / p) / labLen : 0;
+      /* 准备工时按档取值，没填(0)就显示工序默认准备工时，与计算口径一致 */
+      var prepShow = Number(d.prep) > 0 ? Number(d.prep) : (Number(L.prep.spot) || 0);
       return '<span class="lb">Φ≥</span>' + lNum('spotTab', i, 'od', d.od, '1') +
-        lNum('spotTab', i, 'parts', d.parts, '1') + lNum('spotTab', i, 'aux', d.aux, '0.1') +
+        lNum('spotTab', i, 'parts', d.parts, '1') + lNum('spotTab', i, 'prep', prepShow, '0.5') +
         '<span class="lc">' + (std ? dec3(std) : '—') + '</span>' + lDel('spotTab', i);
     }).join('') + '</div>' + lAdd('spotTab', '新增一档') + '</div>';
 
@@ -4277,7 +4284,16 @@ function bindLabor() {
       return;
     }
     if ((k = t.getAttribute('data-wman'))) { DB.labor.man[k] = Math.max(0, parseFloat(t.value) || 0); persist(); renderLabor(); return; }
-    if ((k = t.getAttribute('data-wprep'))) { DB.labor.prep[k] = Math.max(0, parseFloat(t.value) || 0); persist(); renderLabor(); return; }
+    if ((k = t.getAttribute('data-wprep'))) {
+      var pv = Math.max(0, parseFloat(t.value) || 0);
+      DB.labor.prep[k] = pv;
+      /* 自动点校的准备工时是按外径分档的，在工序表里改也写回当前档 */
+      if (k === 'spot') {
+        var spotR = tierOf(DB.labor.spotTab, (parseFloat(($('w-od') || {}).value) || 0), 'od');
+        if (spotR) spotR.prep = pv;
+      }
+      persist(); renderLabor(); renderLaborRules(); return;
+    }
     if ((k = t.getAttribute('data-wmach'))) { DB.labor.mach[k] = t.value; persist(); renderLabor(); return; }
     if ((k = t.getAttribute('data-wround'))) {
       DB.labor.rounds[k] = Math.min(9, Math.max(1, Math.round(parseFloat(t.value) || 1)));
@@ -4344,7 +4360,7 @@ function bindLabor() {
       else if (key === 'partsOD') nw = { od: (Number(last.od) || 0) + 30, parts: last.parts };
       else if (key === 'pickMin') nw = { code: '新牌号', v: last.v, od: last.od || 0, parts: last.parts || 0 };
       else if (key === 'straight') nw = { od: (Number(last.od) || 0) + 30, m: last.m, m2: last.m2 || 0 };
-      else if (key === 'spotTab') nw = { od: (Number(last.od) || 0) + 40, parts: Math.max(30, Math.round((Number(last.parts) || 300) * 0.85)), aux: last.aux || 0 };
+      else if (key === 'spotTab') nw = { od: (Number(last.od) || 0) + 40, parts: Math.max(30, Math.round((Number(last.parts) || 300) * 0.85)), prep: last.prep || 15 };
       else if (key === 'stepFeed') nw = { wall: (Number(last.wall) || 0) + 4, feed: last.feed, aux: last.aux };
       else return;
       arr.push(nw);
