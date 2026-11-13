@@ -3110,16 +3110,16 @@ function buildSteps(res, route) {
       /* 路线里出现多个冷拔/冷轧时，按路线分段标 ①②…，这样 1 拔 / 2 拔 / 3 拔在卡上能看出区别 */
       var lbl = drawName + (k > 1 ? (CIR.charAt(gi) || ('(' + (gi + 1) + ')')) : '');
       for (j = 0; j < cnt && pi < rows.length; j++) {
-        list.push({ st: lbl, row: rows[pi] });
+        list.push({ st: lbl, row: rows[pi], draw: true });
         pi++;
       }
       gi++;
     } else {
-      list.push({ st: st, row: pi > 0 ? rows[pi - 1] : null });
+      list.push({ st: st, row: pi > 0 ? rows[pi - 1] : null, draw: false });
     }
   }
   while (pi < rows.length) {
-    list.push({ st: drawName + (k > 1 ? (CIR.charAt(gi) || ('(' + (gi + 1) + ')')) : ''), row: rows[pi] });
+    list.push({ st: drawName + (k > 1 ? (CIR.charAt(gi) || ('(' + (gi + 1) + ')')) : ''), row: rows[pi], draw: true });
     pi++;
   }
   return list;
@@ -3169,7 +3169,7 @@ function renderSheet2(res, card) {
   steps.forEach(function (s) {
     var r = s.row;
     var oD = r ? r.d : f.d0, oS = r ? r.s : f.s0;
-    var isDraw = (s.st === drawName);
+    var isDraw = !!s.draw;
     var dOut = r && r.die && r.die.out ? r.die.out.v : oD;
     var dIn = r && r.die && r.die.inn ? r.die.inn.v : (oD - 2 * oS);
     h.push('<tr>' +
