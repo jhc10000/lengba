@@ -3161,17 +3161,22 @@ function renderSheet2(res, card) {
     '<col style="width:7%"><col style="width:12%"><col style="width:10%"><col style="width:10%"><col style="width:10%"><col style="width:9%">' +
     '<col style="width:11%"><col style="width:11%"><col style="width:10%"><col style="width:10%">' +
     '</colgroup>');
-  h.push('<tr><th>No.</th><th>工序</th><th>外径</th><th>壁厚</th><th>拉力T</th><th>延伸</th>' +
-    '<th>' + pt.dieOut + '</th><th>' + pt.dieIn + '</th><th>芯杆</th><th>钳口</th></tr>');
-
   var no = 10;
-  var drawName = isRoll() ? '冷轧' : '冷拔';
+  var isRollMode = isRoll();
+  var drawName = isRollMode ? '冷轧' : '冷拔';
+  /* 冷轧时后两列改名：芯杆→顶杆、钳口→齿数 */
+  var hCore = isRollMode ? '顶杆' : '芯杆';
+  var hJaw = isRollMode ? '齿数' : '钳口';
+  h.push('<tr><th>No.</th><th>工序</th><th>外径</th><th>壁厚</th><th>' + (isRollMode ? '轧制力T' : '拉力T') + '</th><th>延伸</th>' +
+    '<th>' + pt.dieOut + '</th><th>' + pt.dieIn + '</th><th>' + hCore + '</th><th>' + hJaw + '</th></tr>');
+
   steps.forEach(function (s) {
     var r = s.row;
     var oD = r ? r.d : f.d0, oS = r ? r.s : f.s0;
     var isDraw = !!s.draw;
-    var dOut = r && r.die && r.die.out ? r.die.out.v : oD;
-    var dIn = r && r.die && r.die.inn ? r.die.inn.v : (oD - 2 * oS);
+    /* 外模 / 内模（冷轧为 轧辊 / 芯棒）按模具库「规格」列显示 */
+    var specOut = r && r.die && r.die.out ? String(r.die.out.spec != null && r.die.out.spec !== '' ? r.die.out.spec : r.die.out.v) : '';
+    var specIn = r && r.die && r.die.inn ? String(r.die.inn.spec != null && r.die.inn.spec !== '' ? r.die.inn.spec : r.die.inn.v) : '';
     h.push('<tr>' +
       '<td>' + no + '</td>' +
       '<td>' + esc(s.st) + '</td>' +
@@ -3179,10 +3184,10 @@ function renderSheet2(res, card) {
       '<td>' + f2(oS) + '</td>' +
       '<td>' + (isDraw && r ? f1(r.P / 9.80665) : '') + '</td>' +
       '<td>' + (isDraw && r ? f2(r.mu) : '') + '</td>' +
-      '<td>' + (isDraw ? f2(dOut) : '') + '</td>' +
-      '<td>' + (isDraw ? f2(dIn) : '') + '</td>' +
+      '<td>' + (isDraw ? esc(specOut) : '') + '</td>' +
+      '<td>' + (isDraw ? esc(specIn) : '') + '</td>' +
       '<td>' + (isDraw ? f2(oD - 2 * oS) : '') + '</td>' +
-      '<td>' + (isDraw ? f2(oD) : '') + '</td></tr>');
+      '<td>' + (isDraw && !isRollMode ? f2(oD) : '') + '</td></tr>');
     no += 10;
   });
   var pad = 12 - steps.length;
