@@ -3957,8 +3957,8 @@ function renderLaborRules() {
   /* 1 冷拔拉拔工时 */
   h += '<div class="ltab"><h4>冷拔拉拔工时（按成品外径分档）</h4>' +
     '<div class="lfml">工时 分/米 = 拉拔工时 分/米 ＋ 辅助 分/支 ÷ 参考长；冷拔标准工时 = 工时 × 人班 × 道次</div>' +
-    lHead('34px 60px 72px 58px 54px 62px 24px', ['Φ≤', '外径上限', '拉拔工时 分/米', '辅助 分/支', '参考长 m', '工时 分/米', ''], 2) +
-    '<div class="ldraw" style="grid-template-columns:34px 60px 72px 58px 54px 62px 24px;border:0;padding:0">' +
+    lHead('34px 58px 80px 58px 54px 62px 24px', ['Φ≤', '外径上限', '拉拔工时 分/米', '辅助 分/支', '参考长 m', '工时 分/米', ''], 2) +
+    '<div class="ldraw" style="grid-template-columns:34px 58px 80px 58px 54px 62px 24px;border:0;padding:0">' +
     L.draw.map(function (d, i) {
       var tt = Number(d.m) + (Number(d.aux) || 0) / (Number(d.refLen) || 1);
       return '<span class="lb">Φ≤</span>' + lNum('draw', i, 'hi', d.hi, '1') +
@@ -3970,8 +3970,8 @@ function renderLaborRules() {
   /* 2 冷轧工时（进给量/冲次/辅助 已并入本表，不再单列「冷轧送进参数」） */
   h += '<div class="ltab"><h4>冷轧工时（按毛管壁厚分档）</h4>' +
     '<div class="lfml">轧制 分/米 = 坯管长 ÷（进给量 × 冲次）÷ 成品长；辅助 分/米 = 辅助 分/支 ÷ 坯管长；标准工时 =（两者之和）× 人班 × 道次</div>' +
-    lHead('40px 62px 66px 62px 62px 62px 24px', ['壁厚≥', '上限 mm', '分/米参考', '进给量 mm', '冲次 次/min', '辅助 分/支', ''], 1) +
-    '<div class="ldraw" style="grid-template-columns:40px 62px 66px 62px 62px 62px 24px;border:0;padding:0">' +
+    lHead('40px 60px 64px 60px 58px 62px 24px', ['壁厚≥', '上限 mm', '分/米参考', '进给量 mm', '冲次/min', '辅助 分/支', ''], 1) +
+    '<div class="ldraw" style="grid-template-columns:40px 60px 64px 60px 58px 62px 24px;border:0;padding:0">' +
     L.roll.map(function (d, i) {
       return '<span class="lb">壁厚≥</span>' + lNum('roll', i, 'wall', d.wall, '0.1') +
         lNum('roll', i, 'm', d.m, '0.001') + lNum('roll', i, 'feed', d.feed, '0.1') +
@@ -4061,7 +4061,7 @@ function renderLaborRules() {
   [['flame', '火焰切割工时'], ['laser', '激光切割工时']].forEach(function (g) {
     var kind = g[0], C = L.cut[kind], r = computeCut(kind);
     h += '<div class="ltab"><h4>' + g[1] + '</h4>' +
-      '<div class="lfml">切割速度 v = 基准速度 ×（基准板厚 ÷ 板厚）^板厚指数；标准工时 = 外形长度 ÷ v ＋ 孔数 × 穿孔 ÷ 60 ＋ 辅助；换型时间按机台取</div>' +
+      '<div class="lfml">切割速度 v(mm/min) = 基准速度 ×（基准厚 ÷ 板厚）^板厚指数；标准工时 = 外形长度 ÷ v ＋ 孔数 × 穿孔 ÷ 60 ＋ 辅助；换型时间按机台取</div>' +
       '<div class="lcutin">' +
         '<div class="lit"><span class="lb">机台</span><select data-cut="' + kind + '" data-cf="mach">' +
           (C.machines || []).map(function (m) {
@@ -4075,8 +4075,8 @@ function renderLaborRules() {
         ' ＋ 穿孔 ' + dec1(r.pierceT) + ' ＋ 辅助 ' + dec1(r.aux) + '；速度 ' + dec0(r.v) + ' mm/min</span>' +
         '<b>换型时间 ' + dec1(r.setup) + ' 分</b></div>' : '') +
       '<div class="lfml" style="margin-top:10px">机台参数（可改，改完立即按新参数算）</div>' +
-      lHead('1fr 76px 62px 58px 58px 56px 56px 24px', ['机台', '基准速度 mm/min', '基准板厚', '板厚指数', '穿孔 s/孔', '辅助 min', '换型 min', ''], 1) +
-      '<div class="ldraw" style="grid-template-columns:1fr 76px 62px 58px 58px 56px 56px 24px;border:0;padding:0">' +
+      lHead('1fr 74px 58px 56px 56px 54px 54px 24px', ['机台', '基准速度', '基准厚', '板厚指数', '穿孔 s/孔', '辅助 min', '换型 min', ''], 1) +
+      '<div class="ldraw" style="grid-template-columns:1fr 74px 58px 56px 56px 54px 54px 24px;border:0;padding:0">' +
       (C.machines || []).map(function (m, i) {
         return '<input class="ltx" type="text" data-cm="' + kind + '" data-ci="' + i + '" data-cf="name" value="' + esc(m.name) + '">' +
           cNum(kind, i, 'v0', m.v0, '10') + cNum(kind, i, 't0', m.t0, '0.5') + cNum(kind, i, 'k', m.k, '0.05') +
