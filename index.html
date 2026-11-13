@@ -1765,14 +1765,14 @@ var DEFAULT_DB = {
     unit: 't',
     map: {}
   },
-  /* 工时定额（原始取数见《冷拔管工时核算表汇总》：分/米、分/支、分/吨、分/批，全部可在工时页改） */
+  /* 工时定额（原始取数见《冷拔管工时核算表汇总》：分/米、分/支、分/批，全部可在工时页改） */
   labor: {
     shiftH: 11,
     batch: 40,
     partsOD: [{ od: 0, parts: 21 }, { od: 203, parts: 19 }, { od: 273, parts: 17.5 }],
     pack: [{ od: 0, parts: 24 }, { od: 85, parts: 14 }, { od: 160, parts: 10 }, { od: 200, parts: 4 }],
     pickWeight: 5000,
-    /* 酸洗节拍：od=适用外径档（参考）、parts=该材质每包支数（0=按分包重自动算） */
+    /* 酸洗节拍：v=节拍 分/批、od=适用外径档（按外径匹配该行的支数）、parts=该档支数 支/批（0=按分包重自动算） */
     pickMin: [{ code: 'Q345B', v: 30, od: 0, parts: 0 }, { code: 'Q345D', v: 50, od: 0, parts: 0 }, { code: 'H345W', v: 50, od: 0, parts: 0 }, { code: 'H525W', v: 40, od: 0, parts: 0 }, { code: 'H550W', v: 40, od: 0, parts: 0 }],
     carAux: 10.75,
     /* 冷轧送进参数已并入「冷轧工时」表，这里仅保留老数据做迁移用 */
@@ -3639,9 +3639,15 @@ function computeLabor() {
   var packT = tierOf(L.pack, f.g, 'od') || { parts: 24 };
   var packParts = Math.min(L.pickWeight / partWt, packT.parts);
   if (!(packParts > 0)) packParts = 1;
-  var pickRow = (L.pickMin || []).find(function (p) { return p.code === f.mat; });
-  var pickTone = pickRow ? Number(pickRow.v) : null;
-  /* 酸洗节拍表里填了「支数」就用它，否则按分包重/定额表自动算每包支数 */
+  /* 酸洗节拍按「材质 + 外径档」找行：先取该材质下 od ≤ 成品外径 的最大档 */
+  var pickRows = (L.pickMin || []).filter(function (p) { return p.code === f.mat; });
+  var pickRow = null;
+  pickRows.forEach(function (p) {
+    if (Number(p.od) <= f.od && (!pickRow || Number(p.od) >= Number(pickRow.od))) pickRow = p;
+  });
+  if (!pickRow && pickRows.length) pickRow = pickRows[0];
+  var pickBatch = pickRow ? Number(pickRow.v) : null;          /* 节拍 分/批 */
+  /* 支数：优先用该行（对应外径档）填的支数，没填就按分包重/定额自动算 */
   var pickParts = (pickRow && Number(pickRow.parts) > 0) ? Number(pickRow.parts) : packParts;
   if (!(pickParts > 0)) pickParts = 1;
   var drawT = tierHi(L.draw, f.od, 'hi');
@@ -3651,10 +3657,10 @@ function computeLabor() {
   if (!drawT) out.warn.push('成品外径超出冷拔定额表范围（最大 330mm）');
   if (!rollT) out.warn.push('毛管壁厚超出冷轧定额表范围');
   if (!strT) out.warn.push('成品外径超出矫直定额表范围');
-  if (pickTone === null) out.warn.push('材质「' + (f.mat || '未选') + '」未录酸洗节拍，按 30 分/吨计');
+  if (pickBatch === null) out.warn.push('材质「' + (f.mat || '未选') + '」未录酸洗节拍，按 30 分/批计');
   if (f.od > 136) out.warn.push('成品外径 ' + f.od + 'mm 超出 136mm，原表按「超限」处理');
 
-  var pickToneUse = pickTone === null ? 30 : pickTone;
+  var pickBatchUse = pickBatch === null ? 30 : pickBatch;
   var rounds = { draw: Math.max(1, Math.round(Number(L.rounds.draw) || 1)), roll: Math.max(1, Math.round(Number(L.rounds.roll) || 1)) };
   var mach = { draw: L.mach.draw === '400T' ? '400T' : '300T', roll: L.mach.roll === '2#' ? '2#' : '1#' };
 
@@ -3667,16 +3673,16 @@ function computeLabor() {
     proc: 0, aux: (L.carAux || 0) / len, std: (f.shiftH * 60 / parts) / len,
     note: '工时 = ' + dec1(f.shiftH) + '×60÷' + dec1(parts) + '÷' + dec2(len) + '；上/下料 ' + dec2(L.carAux || 0) + ' 分/支'
   });
-  /* 酸洗：节拍（分/吨）× 人班 ÷（成品长 × 每包支数） */
+  /* 酸洗：酸洗工时 = 节拍 分/批 ÷ 该外径对应支数 ÷ 成品长 × 人数 */
   add({
     k: 'pick', name: '酸洗', on: !!L.on.pick, man: Number(L.man.pick) || 0,
     prep: Number(L.prep.pick) || 0,
-    machTxt: (f.mat || '—') + ' · ' + dec1(pickToneUse) + ' 分/吨 · ' + dec1(pickParts) + ' 支/包' +
+    machTxt: (f.mat || '—') + ' · ' + dec1(pickBatchUse) + ' 分/批 · ' + dec1(pickParts) + ' 支/批' +
       (pickRow && Number(pickRow.od) > 0 ? ' · Φ≥' + dec0(pickRow.od) : ''),
-    proc: pickToneUse / (len * pickParts), aux: 0,
-    std: (pickToneUse / (len * pickParts)) * (Number(L.man.pick) || 0),
-    note: '节拍 ' + dec1(pickToneUse) + ' 分/吨 ÷（成品长 ' + dec2(len) + ' × ' + dec0(pickParts) + ' 支/包）× 人班 ' +
-      dec0(L.man.pick)
+    proc: pickBatchUse / pickParts / len, aux: 0,
+    std: (pickBatchUse / pickParts / len) * (Number(L.man.pick) || 0),
+    note: '节拍 ' + dec1(pickBatchUse) + ' 分/批 ÷ ' + dec0(pickParts) + ' 支/批 ÷ 成品长 ' + dec2(len) +
+      ' m × 人数 ' + dec0(L.man.pick) + ' = ' + dec3(pickBatchUse / pickParts / len * (Number(L.man.pick) || 0)) + ' 分/米'
   });
   /* 冷拔：拉拔工时（分/米）= 分/米定额 + 辅助 分/支 ÷ 参考长；标准工时 = 拉拔工时 × 人班 × 道次 */
   if (drawT) {
@@ -4002,9 +4008,9 @@ function renderLaborRules() {
     '</div></div>';
 
   /* 4 酸洗节拍 */
-  h += '<div class="ltab"><h4>酸洗节拍（按材质，分/吨）</h4>' +
-    '<div class="lfml">酸洗 分/米 = 节拍 分/吨 ÷（成品长 × 支数）× 人班；支数填 0 = 按分包单重/定额自动算</div>' +
-    lHead('1fr 62px 62px 62px 24px', ['材质', '外径 Φ≥', '支数 支/包', '分/吨', ''], 2) +
+  h += '<div class="ltab"><h4>酸洗节拍（按材质 + 外径，分/批）</h4>' +
+    '<div class="lfml">酸洗工时 分/米 = 节拍 分/批 ÷ 该外径对应支数 ÷ 成品长 × 人数；按「材质 + 成品外径」匹配行（同材质可多档），支数填 0 = 按分包单重自动算</div>' +
+    lHead('1fr 62px 62px 62px 24px', ['材质', '外径 Φ≥', '支数 支/批', '分/批', ''], 2) +
     '<div class="ldraw" style="grid-template-columns:1fr 62px 62px 62px 24px;border:0;padding:0">' +
     L.pickMin.map(function (d, i) {
       return '<input class="ltx" type="text" data-lt="pickMin" data-li="' + i + '" data-lf="code" value="' + esc(d.code) + '">' +
