@@ -3099,6 +3099,7 @@ function renderSheet(res) {
 function buildSteps(res, route) {
   var seq = (route && route.steps && route.steps.length) ? route.steps.slice() : ['酸洗', '冷拔', '退火', '矫直', '探伤'];
   var drawName = isRoll() ? '冷轧' : '冷拔';
+  var CIR = '①②③④⑤⑥⑦⑧⑨';
   var rows = res.rows, k = 0, list = [], pi = 0, gi = 0, i, j, cnt;
   for (i = 0; i < seq.length; i++) if (seq[i] === '冷拔' || seq[i] === '冷轧') k++;
   if (!k) { seq.splice(1, 0, drawName); k = 1; }
@@ -3106,8 +3107,10 @@ function buildSteps(res, route) {
     var st = seq[i];
     if (st === '冷拔' || st === '冷轧') {
       cnt = Math.max(1, Math.ceil((rows.length - pi) / Math.max(k - gi, 1)));
+      /* 路线里出现多个冷拔/冷轧时，按路线分段标 ①②…，这样 1 拔 / 2 拔 / 3 拔在卡上能看出区别 */
+      var lbl = drawName + (k > 1 ? (CIR.charAt(gi) || ('(' + (gi + 1) + ')')) : '');
       for (j = 0; j < cnt && pi < rows.length; j++) {
-        list.push({ st: drawName, row: rows[pi] });
+        list.push({ st: lbl, row: rows[pi] });
         pi++;
       }
       gi++;
@@ -3115,7 +3118,10 @@ function buildSteps(res, route) {
       list.push({ st: st, row: pi > 0 ? rows[pi - 1] : null });
     }
   }
-  while (pi < rows.length) { list.push({ st: drawName, row: rows[pi] }); pi++; }
+  while (pi < rows.length) {
+    list.push({ st: drawName + (k > 1 ? (CIR.charAt(gi) || ('(' + (gi + 1) + ')')) : ''), row: rows[pi] });
+    pi++;
+  }
   return list;
 }
 
