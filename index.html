@@ -981,7 +981,15 @@ table.cmp .worse{color:#AB2A20}
     width:auto;min-height:0;height:auto;margin:0;box-shadow:none;padding:12mm;
     page-break-after:auto;
   }
-  .sheet.tpl2{height:208mm;min-height:208mm}
+  /* 模板二横向：不再写死 297mm 宽 —— iOS/安卓打印会强制留边，写死 297mm 就被挤到第二页。
+     改成跟随可打印区宽度、高度随内容走；再用 --print-zoom 做保险 */
+  .sheet.tpl2{width:100%;height:100vh;min-height:0;padding:8mm;overflow:hidden;
+    break-inside:avoid;page-break-inside:avoid}
+  .sheet.tpl2 th,.sheet.tpl2 td{font-size:7.6pt;padding:2.2px 1.6px}
+  .sheet.tpl2 .sec{margin-top:5px}
+  .sheet.tpl2 .sheetfoot{margin-top:5mm}
+  .sheet{zoom:var(--print-zoom,1)}
+  #__lb_sync_badge{display:none!important}
   .sheet.tpl1.full{height:294mm;min-height:294mm}
   .sheetfoot{position:static;margin-top:9mm}
   .sheet input{border:0;background:none}
@@ -1303,6 +1311,12 @@ table.cmp .worse{color:#AB2A20}
         <div class="row"><label for="c-tpl">打印模板</label><div class="field"><select id="c-tpl">
           <option value="1">模板一 · 工艺卡</option>
           <option value="2">模板二 · 车间工序卡</option>
+        </select></div></div>
+        <div class="row"><label for="c-scale">打印缩放</label><div class="field"><select id="c-scale">
+          <option value="100">100% · 原尺寸</option>
+          <option value="97">97%</option>
+          <option value="94">94% · 手机出两页时用</option>
+          <option value="90">90% · 仍两页再用</option>
         </select></div></div>
         <div class="row"><label for="c-route">工艺路线</label><div class="field"><select id="c-route"></select></div></div>
         <div class="row"><label for="c-angle">模具锥角</label><div class="field hasunit"><input id="c-angle" type="number" step="1" min="4" max="30" value="12"><span class="unit">°</span></div></div>
@@ -4816,6 +4830,21 @@ function bindEvents() {
     persist();
     renderSheetSoon();
   });
+  /* 打印缩放：写进 --print-zoom，只在打印时作用于 .sheet（屏幕预览不变） */
+  var applyPrintZoom = function (v) {
+    var z = Math.min(100, Math.max(60, parseFloat(v) || 100));
+    document.body.style.setProperty('--print-zoom', (z / 100).toFixed(3));
+  };
+  if ($('c-scale')) {
+    applyPrintZoom(DB.card.scale || 100);
+    $('c-scale').value = String(DB.card.scale || 100);
+    $('c-scale').addEventListener('change', function () {
+      DB.card.scale = parseFloat(this.value) || 100;
+      applyPrintZoom(DB.card.scale);
+      persist();
+      toast('模板二打印缩放 ' + DB.card.scale + '%（只影响打印）');
+    });
+  }
   $('c-route').addEventListener('change', function () {
     DB.card.route = this.value;
     persist();
