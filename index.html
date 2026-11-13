@@ -1432,39 +1432,6 @@ table.cmp .worse{color:#AB2A20}
 
       <div class="dbox">
         <div class="dbox-hd">
-          <h3>分包与支数</h3>
-          <span class="sub">均按「坯料外径」分档；酸洗支数、车头支数都从这里取</span>
-          <div class="act"><button type="button" class="mini pri" id="btn-add-pack">新增档</button></div>
-        </div>
-        <div class="dbox-body">
-          <div class="packsplit">
-            <div>
-              <div class="packtitle">分包表 · 每包支数（酸洗用）</div>
-              <table class="dt">
-                <colgroup><col style="width:26%"><col style="width:26%"><col style="width:40%"><col style="width:8%"></colgroup>
-                <thead><tr><th>坯料外径 Φ≥</th><th>支/包</th><th class="l">当前取值</th><th></th></tr></thead>
-                <tbody id="packbody"></tbody>
-              </table>
-            </div>
-            <div>
-              <div class="packtitle">车头支数 · 支/班（按坯料外径）</div>
-              <table class="dt">
-                <colgroup><col style="width:26%"><col style="width:26%"><col style="width:40%"><col style="width:8%"></colgroup>
-                <thead><tr><th>坯料外径 Φ≥</th><th>支/班</th><th class="l">车头工时 分/米</th><th></th></tr></thead>
-                <tbody id="partsodbody"></tbody>
-              </table>
-            </div>
-          </div>
-          <div style="font-size:11.5px;color:#737C82;margin-top:8px;line-height:1.5">
-            取档规则：取「Φ≥ ≤ 坯料外径」的最大档。分包单重
-            <input id="pack-weight" type="number" step="100" min="0" style="width:74px;border:1px solid #C8CDD2;border-radius:4px;padding:2px 5px;font:inherit">
-            kg 仅用于显示参考（实际支数以本表为准）。车头工时 = 上班时间×60÷支数÷成品长。
-          </div>
-        </div>
-      </div>
-
-      <div class="dbox">
-        <div class="dbox-hd">
           <h3>成品机械性能类别</h3>
           <span class="sub">按牌号维护交货性能，打印模板二「性能」栏自动带出</span>
           <div class="act"><button type="button" class="mini pri" id="btn-add-mech">新增类别</button></div>
@@ -3301,8 +3268,6 @@ function renderData() {
       '<td><input class="txt" data-tl="' + i + '" data-k="note" value="' + esc(t.note || '') + '"></td>' +
       '<td><button class="del" data-deltol="' + i + '" title="删除">×</button></td></tr>';
   }).join('');
-
-  renderPack();
 
   $('mechbody').innerHTML = DB.mech.map(function (m, i) {
     return '<tr>' +
