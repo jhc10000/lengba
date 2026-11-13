@@ -394,7 +394,9 @@ table.hours td .hcell:focus{outline:0;border-bottom-color:var(--steel);backgroun
 .wprocs{display:grid;grid-template-columns:1fr 1fr;gap:4px 10px;font-size:12.5px}
 .wprocs label{display:flex;align-items:center;gap:6px;min-height:30px;color:var(--ink2);cursor:pointer}
 .wprocs label input{width:16px;height:16px;accent-color:var(--steel);flex:none}
-.ltabs{columns:2;column-gap:32px}
+/* 两列布局：用 grid 而不是 columns，否则长表会被拦腰切断到下一栏 */
+.ltabs{display:grid;grid-template-columns:1fr 1fr;gap:0 32px;align-items:start}
+@media(max-width:1080px){.ltabs{grid-template-columns:1fr}}
 @media (max-width:900px){.ltabs{columns:1}}
 .ltab{break-inside:avoid;page-break-inside:avoid;margin:0 0 18px}
 .ltab h4{margin:0 0 4px;font-size:11.5px;font-weight:700;color:var(--ink2)}
@@ -416,6 +418,29 @@ table.hours td .hcell:focus{outline:0;border-bottom-color:var(--steel);backgroun
 }
 .ldraw input:focus{outline:0;border-color:var(--steel)}
 .ldraw input.ltx{text-align:left}
+/* 计算公式说明 + 只读计算值 + 切割面板 */
+.ltab .lfml{font-size:10.5px;line-height:1.5;color:var(--ink3);background:#F6F7F5;border-left:2px solid var(--line);
+  padding:4px 8px;margin:0 0 6px;border-radius:0 4px 4px 0}
+/* 宽表在窄屏横向滚动，表头与数据一起滚，不挤压 */
+.ltab .lscroll{overflow-x:auto;-webkit-overflow-scrolling:touch}
+@media(max-width:560px){
+  .ltabs{columns:1}
+  /* 窄屏：整块可横向滑动，标题与说明钉在左边，表格跟着手指划 */
+  .ltab{overflow-x:auto;-webkit-overflow-scrolling:touch}
+  .ltab > h4,.ltab > .lfml{position:sticky;left:0;z-index:1;background:#fff}
+  .ltab > .lfml{background:#F6F7F5}
+}
+.ldraw .lc{text-align:right;font-family:Bahnschrift,sans-serif;font-size:11.5px;color:var(--steel);font-weight:600;
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.lcutin{display:grid;grid-template-columns:repeat(2,1fr);gap:6px 10px;margin-bottom:8px}
+.lcutin .lit{display:grid;grid-template-columns:78px 1fr;align-items:center;gap:6px;font-size:11.5px}
+.lcutin .lit select,.lcutin .lit input{
+  appearance:none;border:1px solid var(--line);border-radius:var(--radius);background:var(--paper);
+  padding:4px 6px;font:inherit;font-size:11.5px;min-height:28px;width:100%;
+}
+.lcout{display:flex;align-items:center;flex-wrap:wrap;gap:6px 14px;font-size:11.5px;color:var(--ink2);
+  background:#EEF4FB;border:1px solid #C9DCF0;border-radius:var(--radius);padding:6px 9px;margin-bottom:8px}
+.lcout b{font-family:Bahnschrift,sans-serif;font-size:12.5px;color:#153A66}
 .delx{
   appearance:none;border:1px solid transparent;background:none;color:var(--ink3);
   width:24px;height:26px;font-size:14px;line-height:1;padding:0;border-radius:var(--radius);justify-self:center;
@@ -1747,8 +1772,10 @@ var DEFAULT_DB = {
     partsOD: [{ od: 0, parts: 21 }, { od: 203, parts: 19 }, { od: 273, parts: 17.5 }],
     pack: [{ od: 0, parts: 24 }, { od: 85, parts: 14 }, { od: 160, parts: 10 }, { od: 200, parts: 4 }],
     pickWeight: 5000,
-    pickMin: [{ code: 'Q345B', v: 30 }, { code: 'Q345D', v: 50 }, { code: 'H345W', v: 50 }, { code: 'H525W', v: 40 }, { code: 'H550W', v: 40 }],
+    /* 酸洗节拍：od=适用外径档（参考）、parts=该材质每包支数（0=按分包重自动算） */
+    pickMin: [{ code: 'Q345B', v: 30, od: 0, parts: 0 }, { code: 'Q345D', v: 50, od: 0, parts: 0 }, { code: 'H345W', v: 50, od: 0, parts: 0 }, { code: 'H525W', v: 40, od: 0, parts: 0 }, { code: 'H550W', v: 40, od: 0, parts: 0 }],
     carAux: 10.75,
+    /* 冷轧送进参数已并入「冷轧工时」表，这里仅保留老数据做迁移用 */
     stepFeed: [{ wall: 0, feed: 7, aux: 3.5 }, { wall: 18, feed: 6, aux: 4.5 }, { wall: 22, feed: 5, aux: 5 }],
     draw: [
       { hi: 108, m: 0.165, aux: 5.3, refLen: 12.5 },
@@ -1761,7 +1788,13 @@ var DEFAULT_DB = {
       { hi: 290, m: 0.457, aux: 8.9, refLen: 11 },
       { hi: 330, m: 0.562, aux: 11.5, refLen: 10 }
     ],
-    roll: [{ wall: 0, m: 1.638 }, { wall: 15.1, m: 1.838 }, { wall: 18.1, m: 2.138 }, { wall: 22.1, m: 2.738 }],
+    /* 冷轧：m=分/米、feed=进给量 mm/次、rpm=冲次 次/min、auxPM=辅助 分/米 */
+    roll: [
+      { wall: 0, m: 1.638, feed: 7, rpm: 40, auxPM: 3.5 },
+      { wall: 15.1, m: 1.838, feed: 6.5, rpm: 38, auxPM: 4.5 },
+      { wall: 18.1, m: 2.138, feed: 6, rpm: 36, auxPM: 4.5 },
+      { wall: 22.1, m: 2.738, feed: 5, rpm: 34, auxPM: 5 }
+    ],
     anneal: 0.18,
     anneal2: 0.18,
     annealSpeed: 13,
@@ -1769,9 +1802,41 @@ var DEFAULT_DB = {
     normal: 0.18,
     normalSpeed: 25,
     furnaceParts: 15,
-    straight: [{ od: 0, m: 0.12 }, { od: 90, m: 0.13 }, { od: 130, m: 0.14 }, { od: 160, m: 0.2 }, { od: 190, m: 0.23 }, { od: 230, m: 0.24 }, { od: 270, m: 0.268 }],
+    /* 矫直：m=普通工时 分/米、m2=特殊工时 分/米（高强/难矫直材质另计） */
+    straight: [
+      { od: 0, m: 0.12, m2: 0 }, { od: 90, m: 0.13, m2: 0.02 }, { od: 130, m: 0.14, m2: 0.03 },
+      { od: 160, m: 0.2, m2: 0.04 }, { od: 190, m: 0.23, m2: 0.05 }, { od: 230, m: 0.24, m2: 0.06 },
+      { od: 270, m: 0.268, m2: 0.07 }
+    ],
     inspect: 2.274,
     spot: 0.92,
+    /* 自动点校：按成品外径分档，parts=支/班、aux=辅助时间 分/支
+       （默认值取「≈0.92 分/支」反算，即 11h×60÷720，保持与旧口径一致，按实际改） */
+    spotTab: [
+      { od: 0, parts: 720, aux: 0 },
+      { od: 60, parts: 660, aux: 0 },
+      { od: 90, parts: 600, aux: 0 },
+      { od: 130, parts: 520, aux: 0 },
+      { od: 170, parts: 430, aux: 0 },
+      { od: 210, parts: 360, aux: 0 }
+    ],
+    /* 火焰 / 激光切割工时：基准速度 v0 @ 基准板厚 t0，板厚指数 k（越大板越厚越慢） */
+    cut: {
+      flame: {
+        mach: '火焰 1#', t: 10, len: 2000, holes: 4,
+        machines: [
+          { name: '火焰 1#', v0: 450, t0: 10, k: 1.15, pierce: 6, aux: 3, setup: 20 },
+          { name: '火焰 2#', v0: 520, t0: 10, k: 1.15, pierce: 5, aux: 3, setup: 25 }
+        ]
+      },
+      laser: {
+        mach: '激光 1#', t: 3, len: 2000, holes: 4,
+        machines: [
+          { name: '激光 1#', v0: 3200, t0: 3, k: 1.4, pierce: 1.2, aux: 2, setup: 15 },
+          { name: '激光 2#', v0: 4500, t0: 3, k: 1.4, pierce: 1, aux: 2, setup: 15 }
+        ]
+      }
+    },
     man: { car: 1, pick: 3, draw: 2, roll: 2, anneal: 2, anneal2: 2, normal: 2, straight: 1, inspect: 1, spot: 1 },
     prep: { car: 0, pick: 0, draw300: 16, draw400: 17.5, roll1: 70, roll2: 70, anneal: 0, anneal2: 0, normal: 0, straight: 15, inspect: 15, spot: 15 },
     on: { car: true, pick: true, draw: true, roll: false, anneal: true, anneal2: false, normal: false, straight: true, inspect: true, spot: false },
@@ -1939,7 +2004,11 @@ var DB = (function () {
       machines: (Array.isArray(p.machines) && p.machines.length)
         ? p.machines.map(function (m) {
             m.proc = (m.proc === 'roll' || m.proc === 'push') ? m.proc : 'draw';
-            m.pushKN = (Number(m.pushKN) > 0) ? Number(m.pushKN) : Number(m.kN);
+            /* 挤头能力单独一列：只有老数据「完全没有这个字段」时才按最大拔力兜底，
+               明确填 0 的表示该机组不能挤头，绝不覆盖（避免挤头/拉拔口径混用） */
+            if (m.pushKN === undefined || m.pushKN === null || m.pushKN === '') m.pushKN = Number(m.kN) || 0;
+            else m.pushKN = Math.max(0, Number(m.pushKN) || 0);
+            m.kN = Math.max(0, Number(m.kN) || 0);
             return m;
           })
         : clone(DEFAULT_DB.machines),
@@ -1959,6 +2028,37 @@ var DB = (function () {
         ['man', 'prep', 'on', 'mach', 'rounds'].forEach(function (k) {
           L[k] = Object.assign(clone(d[k]), pl[k] || {});
         });
+        /* ---- 老数据补齐：新增字段逐个兜底，缺了也不会算出 NaN ---- */
+        L.pickMin = (Array.isArray(L.pickMin) ? L.pickMin : clone(d.pickMin)).map(function (r) {
+          return { code: r.code, v: r.v, od: Number(r.od) || 0, parts: Number(r.parts) || 0 };
+        });
+        L.straight = (Array.isArray(L.straight) ? L.straight : clone(d.straight)).map(function (r) {
+          return { od: r.od, m: r.m, m2: Number.isFinite(Number(r.m2)) ? Number(r.m2) : 0 };
+        });
+        var oldFeed = Array.isArray(L.stepFeed) ? L.stepFeed : clone(d.stepFeed);
+        L.roll = (Array.isArray(L.roll) ? L.roll : clone(d.roll)).map(function (r) {
+          var f = null;
+          oldFeed.forEach(function (s) { if (Number(s.wall) === Number(r.wall)) f = s; });
+          return {
+            wall: r.wall, m: r.m,
+            feed: Number(r.feed) || (f ? Number(f.feed) : 7),
+            rpm: Number(r.rpm) || 40,
+            auxPM: Number.isFinite(Number(r.auxPM)) ? Number(r.auxPM) : (f ? Number(f.aux) : 3.5)
+          };
+        });
+        L.spotTab = (Array.isArray(L.spotTab) && L.spotTab.length) ? L.spotTab : clone(d.spotTab);
+        L.cut = (function (c) {
+          var D = clone(d.cut), out = {};
+          ['flame', 'laser'].forEach(function (k) {
+            var src = (c && c[k]) || {};
+            out[k] = {
+              mach: src.mach || D[k].mach, t: Number(src.t) || D[k].t,
+              len: Number(src.len) || D[k].len, holes: Number.isFinite(Number(src.holes)) ? Number(src.holes) : D[k].holes,
+              machines: (Array.isArray(src.machines) && src.machines.length) ? src.machines : D[k].machines
+            };
+          });
+          return out;
+        })(L.cut);
         return L;
       })(DEFAULT_DB.labor),
       aux: (p.aux && typeof p.aux === 'object' && Array.isArray(p.aux.cap)) ? p.aux : null,
@@ -3521,22 +3621,27 @@ function computeLabor() {
   if (!(wall > 0)) wall = (f.od - f.id) / 2;
   var mu = ((f.g - f.h) * f.h) / ((f.od - wall) * wall);
   if (!(mu > 0)) mu = 1;
-  var lenCalc = f.glen * mu;
+  /* 挤头段在挤压后被切掉、不参与延伸：成品长 =（坯料长 − 挤头段长）× 延伸率 */
+  var pushLenM = Math.max(0, Number(DB.push && DB.push.len) || 0) / 1000;
+  var glenNet = Math.max(f.glen - pushLenM, 0);
+  var lenCalc = glenNet * mu;
+  if (!(lenCalc > 0)) lenCalc = f.glen * mu;
   var len = (f.lenMode === 'len' && f.lenIn > 0) ? f.lenIn : lenCalc;
   if (!(len > 0)) len = lenCalc;
-  var glenUse = mu > 0 ? len / mu : f.glen;
+  var glenUse = mu > 0 ? (len / mu + pushLenM) : f.glen;
   var perM = (f.od - wall) * wall * 0.02466;
   var partWt = (f.g - f.h) * f.h * 0.02466 * glenUse;
 
-  var feedT = tierOf(L.stepFeed, f.h, 'wall') || { feed: 7, aux: 3 };
-  var rollTime = glenUse * 1000 / feedT.feed / f.passN;
-  var rollPM = rollTime / len, rollAuxPM = feedT.aux / len;
+  var feedT = tierOf(L.stepFeed, f.h, 'wall') || { feed: 7, aux: 3 };   /* 旧「送进参数」表，仅作兜底 */
   var parts = f.parts > 0 ? f.parts : ((tierOf(L.partsOD, f.g, 'od') || { parts: 21 }).parts);
   var packT = tierOf(L.pack, f.g, 'od') || { parts: 24 };
   var packParts = Math.min(L.pickWeight / partWt, packT.parts);
   if (!(packParts > 0)) packParts = 1;
   var pickRow = (L.pickMin || []).find(function (p) { return p.code === f.mat; });
   var pickTone = pickRow ? Number(pickRow.v) : null;
+  /* 酸洗节拍表里填了「支数」就用它，否则按分包重/定额表自动算每包支数 */
+  var pickParts = (pickRow && Number(pickRow.parts) > 0) ? Number(pickRow.parts) : packParts;
+  if (!(pickParts > 0)) pickParts = 1;
   var drawT = tierHi(L.draw, f.od, 'hi');
   var rollT = tierOf(L.roll, f.h, 'wall');
   var strT = tierOf(L.straight, f.od, 'od');
@@ -3563,30 +3668,48 @@ function computeLabor() {
   /* 酸洗：节拍（分/吨）× 人班 ÷（成品长 × 每包支数） */
   add({
     k: 'pick', name: '酸洗', on: !!L.on.pick, man: Number(L.man.pick) || 0,
-    prep: Number(L.prep.pick) || 0, machTxt: (f.mat || '—') + ' · ' + dec1(pickToneUse) + ' 分/吨 · ' + dec1(packParts) + ' 支/包',
-    proc: pickToneUse / (len * packParts), aux: 0, std: (pickToneUse / (len * packParts)) * (Number(L.man.pick) || 0),
-    note: '分包 ' + dec0(L.pickWeight) + ' kg'
+    prep: Number(L.prep.pick) || 0,
+    machTxt: (f.mat || '—') + ' · ' + dec1(pickToneUse) + ' 分/吨 · ' + dec1(pickParts) + ' 支/包' +
+      (pickRow && Number(pickRow.od) > 0 ? ' · Φ≥' + dec0(pickRow.od) : ''),
+    proc: pickToneUse / (len * pickParts), aux: 0,
+    std: (pickToneUse / (len * pickParts)) * (Number(L.man.pick) || 0),
+    note: '节拍 ' + dec1(pickToneUse) + ' 分/吨 ÷（成品长 ' + dec2(len) + ' × ' + dec0(pickParts) + ' 支/包）× 人班 ' +
+      dec0(L.man.pick)
   });
-  /* 冷拔：分/米定额 + 辅助分/支 ÷ 实际长度，× 人班 × 道次 */
+  /* 冷拔：拉拔工时（分/米）= 分/米定额 + 辅助 分/支 ÷ 参考长；标准工时 = 拉拔工时 × 人班 × 道次 */
   if (drawT) {
-    var dm = Number(drawT.m), da = Number(drawT.aux) / (Number(drawT.refLen) || 1);
+    var dm = Number(drawT.m), dRef = Number(drawT.refLen) || 1;
+    var da = Number(drawT.aux) / dRef;
+    var dTime = dm + da;
     add({
       k: 'draw', name: '冷拔', on: !!L.on.draw, man: Number(L.man.draw) || 0,
       prep: Number(L.prep[mach.draw === '400T' ? 'draw400' : 'draw300']) || 0,
-      machTxt: '≤Φ' + dec0(drawT.hi) + ' 档 · ' + dec2(dm) + ' 分/米', machSel: 'draw', rounds: rounds.draw,
-      proc: dm, aux: da, std: (dm + da) * (Number(L.man.draw) || 0) * rounds.draw,
-      note: '辅助 ' + dec1(Number(drawT.aux)) + ' 分/支 · 参考长 ' + dec1(drawT.refLen) + ' m'
+      machTxt: '≤Φ' + dec0(drawT.hi) + ' 档 · ' + dec3(dm) + ' 分/米', machSel: 'draw', rounds: rounds.draw,
+      proc: dm, aux: da, std: dTime * (Number(L.man.draw) || 0) * rounds.draw,
+      dTime: dTime,
+      note: '拉拔工时 ' + dec3(dTime) + ' = ' + dec3(dm) + ' + ' + dec1(Number(drawT.aux)) + '÷' + dec1(dRef) + '；× 人班 ' +
+        dec0(L.man.draw) + ' × ' + dec0(rounds.draw) + ' 道'
     });
   }
-  /* 冷轧：分/米（按毛管壁厚）× 人班 ÷ 延伸，道次可加 */
+  /* 冷轧：按「进给量 mm/次 × 冲次 次/min」算轧制时间，再折每米；辅助 分/米 另加 */
   if (rollT) {
-    var rm = Number(rollT.m) / mu;
+    var rFeed = Number(rollT.feed) || 7, rRpm = Number(rollT.rpm) || 40;
+    var rAuxPM = Number(rollT.auxPM) || 0;
+    var rollT2 = (glenUse * 1000) / (rFeed * rRpm) * rounds.roll;
+    var rm = len > 0 ? rollT2 / len : 0;
+    out.rollTime = rollT2;
+    out.rollPM = rm;
+    out.rollAuxPM = rAuxPM;
+    out.feed = rFeed;
+    out.rpm = rRpm;
     add({
       k: 'roll', name: '冷轧', on: !!L.on.roll, man: Number(L.man.roll) || 0,
       prep: Number(L.prep[mach.roll === '2#' ? 'roll2' : 'roll1']) || 0,
-      machTxt: '壁厚 ' + dec1(rollT.wall) + ' 档 · ' + dec3(Number(rollT.m)) + ' 分/米', machSel: 'roll', rounds: rounds.roll,
-      proc: rm, aux: 0, std: rm * (Number(L.man.roll) || 0) * rounds.roll,
-      note: '÷ 延伸 ' + dec2(mu)
+      machTxt: '壁厚 ' + dec1(rollT.wall) + ' 档 · 进给 ' + dec1(rFeed) + ' mm · ' + dec0(rRpm) + ' 次/min',
+      machSel: 'roll', rounds: rounds.roll,
+      proc: rm, aux: rAuxPM, std: (rm + rAuxPM) * (Number(L.man.roll) || 0) * rounds.roll,
+      note: '轧制 ' + dec1(rollT2) + ' 分/支 = ' + dec0(glenUse * 1000) + 'mm ÷(' + dec1(rFeed) + '×' + dec0(rRpm) + ') × ' +
+        dec0(rounds.roll) + ' 道 → ' + dec3(rm) + ' 分/米 ＋ 辅助 ' + dec1(rAuxPM)
     });
   }
   /* 退火：源表 =（（2＋成品长）/ 退火速度）/（装炉支数×成品长）× 60 × 人班 */
@@ -3613,10 +3736,18 @@ function computeLabor() {
     note: '毛管长 ÷ 速度 ÷（成品长 × 炉容）× 60'
   });
   if (strT) {
+    var sM = Number(strT.m) || 0, sM2 = Number(strT.m2) || 0;
+    /* 高强/耐磨等难矫直材质（H 开头或 W 结尾）加计特殊工时 */
+    var sSpecial = /^H\d/i.test(f.mat || '') || /W$/i.test(f.mat || '');
+    var sUse = sM + (sSpecial ? sM2 : 0);
     add({
       k: 'straight', name: '矫直', on: !!L.on.straight, man: Number(L.man.straight) || 0,
-      prep: Number(L.prep.straight) || 0, machTxt: 'Φ' + dec0(strT.od) + ' 档 · ' + dec2(Number(strT.m)) + ' 分/米',
-      proc: Number(strT.m), aux: 0, std: Number(strT.m) * (Number(L.man.straight) || 0), note: '按成品外径取值'
+      prep: Number(L.prep.straight) || 0,
+      machTxt: 'Φ' + dec0(strT.od) + ' 档 · 普通 ' + dec3(sM) + (sM2 ? ' · 特殊 ' + dec3(sM2) : ''),
+      proc: sM, aux: sSpecial ? sM2 : 0, std: sUse * (Number(L.man.straight) || 0),
+      note: sSpecial
+        ? '高强钢加计特殊工时：' + dec3(sM) + ' + ' + dec3(sM2) + ' = ' + dec3(sUse)
+        : '普通工时 ' + dec3(sM) + '（材质非高强，不计特殊）'
     });
   }
   add({
@@ -3625,11 +3756,18 @@ function computeLabor() {
     proc: 0, aux: Number(L.inspect) / len, std: Number(L.inspect) * (Number(L.man.inspect) || 0) / len,
     note: '按支计，折每米'
   });
+  /* 自动点校：按成品外径查档 → 上班时间×60÷支/班÷成品长（分/米）+ 辅助 分/支÷成品长 */
+  var spotRow = tierOf(L.spotTab, f.od, 'od') || { od: 0, parts: 100, aux: 0 };
+  var spotParts = Math.max(1, Number(spotRow.parts) || 1);
+  var spotAux = Math.max(0, Number(spotRow.aux) || 0);
+  var spotCutPM = (f.shiftH * 60 / spotParts) / len;
   add({
     k: 'spot', name: '自动点校', on: !!L.on.spot, man: Number(L.man.spot) || 0,
-    prep: Number(L.prep.spot) || 0, machTxt: dec2(L.spot) + ' 分/支',
-    proc: 0, aux: Number(L.spot) / len, std: Number(L.spot) * (Number(L.man.spot) || 0) / len,
-    note: '按支计，折每米'
+    prep: Number(L.prep.spot) || 0,
+    machTxt: 'Φ' + dec0(spotRow.od) + ' 档 · ' + dec0(spotParts) + ' 支/班 · 辅助 ' + dec1(spotAux) + ' 分/支',
+    proc: spotCutPM, aux: spotAux / len, std: (spotCutPM + spotAux / len) * (Number(L.man.spot) || 0),
+    note: '加工 ' + dec1(f.shiftH) + '×60÷' + dec0(spotParts) + '÷' + dec2(len) + ' = ' + dec3(spotCutPM) +
+      '；辅助 ' + dec1(spotAux) + '÷' + dec2(len) + ' = ' + dec3(spotAux / len)
   });
 
   var sumPerM = 0, sumPerPart = 0;
@@ -3639,9 +3777,11 @@ function computeLabor() {
   });
 
   out.wall = Math.round(wall * 100) / 100; out.mu = mu; out.len = len; out.lenCalc = lenCalc; out.glen = glenUse;
+  out.pushLenM = pushLenM; out.glenNet = glenNet;
   out.perM = perM; out.partWt = partWt; out.parts = parts; out.packParts = packParts;
-  out.rollTime = rollTime; out.rollPM = rollPM; out.rollAuxPM = rollAuxPM;
-  out.feed = feedT.feed; out.sumPerM = sumPerM; out.sumPerPart = sumPerPart;
+  out.pickParts = pickParts;
+  if (out.feed === undefined) out.feed = feedT.feed;
+  out.sumPerM = sumPerM; out.sumPerPart = sumPerPart;
   out.shiftProd = sumPerPart > 0 ? f.shiftH * 60 / sumPerPart : 0;
   out.perTon = partWt > 0 ? sumPerPart / (partWt / 1000) : 0;
   return out;
@@ -3661,13 +3801,14 @@ function renderLabor() {
   var note = $('w-len-note');
   if (note) {
     note.textContent = res.len > 0
-      ? ('成品长 = 坯管长 × 延伸 ' + dec2(res.mu) + '（' + dec2(res.glen) + ' m → ' + dec2(res.len) + ' m）；改任一格自动换算另一格')
-      : '成品长 = 坯管长 × 延伸';
+      ? ('成品长 =（坯管长 ' + dec2(res.glen) + ' m − 挤头段 ' + dec2(res.pushLenM) + ' m）× 延伸 ' + dec2(res.mu) +
+         ' = ' + dec2(res.len) + ' m；改任一格自动换算另一格')
+      : '成品长 =（坯管长 − 挤头段长）× 延伸';
   }
   /* 成品长 / 坯管长 双向换算：谁被改就以谁为准，另一格跟着变 */
   if (res.len > 0 && res.mu > 0) {
     if ((S.lenMode || 'glen') === 'len') {
-      if ($('w-glen') && document.activeElement !== $('w-glen')) $('w-glen').value = (res.len / res.mu).toFixed(2);
+      if ($('w-glen') && document.activeElement !== $('w-glen')) $('w-glen').value = res.glen.toFixed(2);
     } else if ($('w-len') && document.activeElement !== $('w-len')) {
       $('w-len').value = res.len.toFixed(2);
     }
@@ -3684,8 +3825,8 @@ function renderLabor() {
     if (x.k === 'roll') rollRow = x;
   });
   if (isRoll()) {
-    $('w-note').textContent = '冷轧送进量 ' + dec1(res.feed) + ' mm · 送进 ' + dec0(res.f.passN) + ' 次 · 轧制 ' +
-      dec1(res.rollTime) + ' 分/支 · 辅助 ' + dec1((Lw.stepFeed && tierOf(Lw.stepFeed, res.f.h, 'wall') || {}).aux) + ' 分/支' +
+    $('w-note').textContent = '冷轧 进给 ' + dec1(res.feed) + ' mm/次 × ' + dec0(res.rpm) + ' 次/min · 轧制 ' +
+      dec1(res.rollTime) + ' 分/支 → ' + dec3(res.rollPM) + ' 分/米 · 辅助 ' + dec1(res.rollAuxPM) + ' 分/米' +
       (res.warn.length ? ' ｜ ' + res.warn.join('；') : '');
   } else {
     var dt = tierHi(Lw.draw, res.f.od, 'hi');
@@ -3748,7 +3889,7 @@ function renderLabor() {
 }
 
 /* 定额面板：全部可编辑；每个分项都能增减行 */
-var LT_SORT = { draw: 'hi', roll: 'wall', partsOD: 'od', straight: 'od', stepFeed: 'wall' };
+var LT_SORT = { draw: 'hi', roll: 'wall', partsOD: 'od', straight: 'od', stepFeed: 'wall', spotTab: 'od' };
 
 function lNum(lt, i, f, v, step) {
   return '<input type="number" step="' + (step || '1') + '" data-lt="' + lt + '" data-li="' + i +
@@ -3771,6 +3912,32 @@ function lHead(cols, labels, rightFrom) {
     }).join('') + '</div>';
 }
 
+/* 火焰 / 激光切割：v = v0 ×(t0/t)^k，标准工时 = 外形长 ÷ v + 孔数 × 穿孔 ÷ 60 + 辅助 */
+function computeCut(kind) {
+  var C = DB.labor && DB.labor.cut && DB.labor.cut[kind];
+  if (!C) return null;
+  var list = C.machines || [];
+  var m = list.find(function (x) { return x.name === C.mach; }) || list[0];
+  if (!m) return null;
+  var t = Math.max(0.5, Number(C.t) || 1);
+  var t0 = Math.max(0.5, Number(m.t0) || 10), kk = Number(m.k) || 1;
+  var v = Math.max(1, (Number(m.v0) || 300) * Math.pow(t0 / t, kk));
+  var lenMm = Math.max(0, Number(C.len) || 0);
+  var holes = Math.max(0, Number(C.holes) || 0);
+  var cutT = lenMm / v;
+  var pierceT = holes * (Number(m.pierce) || 0) / 60;
+  var aux = Number(m.aux) || 0;
+  return {
+    mach: m, v: v, t: t, cutT: cutT, pierceT: pierceT, aux: aux,
+    std: cutT + pierceT + aux, setup: Number(m.setup) || 0
+  };
+}
+
+function cNum(kind, i, f, v, step) {
+  return '<input type="number" step="' + (step || '1') + '" data-cm="' + kind + '" data-ci="' + i +
+    '" data-cf="' + f + '" value="' + esc(v) + '">';
+}
+
 function renderLaborRules() {
   var L = DB.labor, box = $('w-rules');
   if (!box) return;
@@ -3783,21 +3950,27 @@ function renderLaborRules() {
 
   /* 1 冷拔拉拔工时 */
   h += '<div class="ltab"><h4>冷拔拉拔工时（按成品外径分档）</h4>' +
-    lHead('30px 70px 66px 66px 66px 26px', ['Φ≤', '外径上限', '分/米', '辅助 分/支', '参考长 m', ''], 1) +
-    '<div class="ldraw" style="grid-template-columns:30px 70px 66px 66px 66px 26px;border:0;padding:0">' +
+    '<div class="lfml">工时 分/米 = 拉拔工时 分/米 ＋ 辅助 分/支 ÷ 参考长；冷拔标准工时 = 工时 × 人班 × 道次</div>' +
+    lHead('34px 60px 72px 58px 54px 62px 24px', ['Φ≤', '外径上限', '拉拔工时 分/米', '辅助 分/支', '参考长 m', '工时 分/米', ''], 2) +
+    '<div class="ldraw" style="grid-template-columns:34px 60px 72px 58px 54px 62px 24px;border:0;padding:0">' +
     L.draw.map(function (d, i) {
+      var tt = Number(d.m) + (Number(d.aux) || 0) / (Number(d.refLen) || 1);
       return '<span class="lb">Φ≤</span>' + lNum('draw', i, 'hi', d.hi, '1') +
         lNum('draw', i, 'm', d.m, '0.001') + lNum('draw', i, 'aux', d.aux, '0.1') +
-        lNum('draw', i, 'refLen', d.refLen, '0.1') + lDel('draw', i);
+        lNum('draw', i, 'refLen', d.refLen, '0.1') +
+        '<span class="lc">' + dec3(tt) + '</span>' + lDel('draw', i);
     }).join('') + '</div>' + lAdd('draw', '新增一档') + '</div>';
 
-  /* 2 冷轧工时 */
-  h += '<div class="ltab"><h4>冷轧工时（按毛管壁厚分档，分/米）</h4>' +
-    lHead('34px 76px 70px 26px', ['壁厚≥', '上限 mm', '分/米', ''], 1) +
-    '<div class="ldraw" style="grid-template-columns:34px 76px 70px 26px;border:0;padding:0">' +
+  /* 2 冷轧工时（进给量/冲次/辅助 已并入本表，不再单列「冷轧送进参数」） */
+  h += '<div class="ltab"><h4>冷轧工时（按毛管壁厚分档）</h4>' +
+    '<div class="lfml">轧制 分/米 = 坯管长 ÷（进给量 × 冲次）÷ 成品长；冷轧标准工时 =（轧制 分/米 ＋ 辅助 分/米）× 人班 × 道次</div>' +
+    lHead('40px 62px 66px 62px 62px 62px 24px', ['壁厚≥', '上限 mm', '分/米参考', '进给量 mm', '冲次 次/min', '辅助 分/米', ''], 1) +
+    '<div class="ldraw" style="grid-template-columns:40px 62px 66px 62px 62px 62px 24px;border:0;padding:0">' +
     L.roll.map(function (d, i) {
       return '<span class="lb">壁厚≥</span>' + lNum('roll', i, 'wall', d.wall, '0.1') +
-        lNum('roll', i, 'm', d.m, '0.001') + lDel('roll', i);
+        lNum('roll', i, 'm', d.m, '0.001') + lNum('roll', i, 'feed', d.feed, '0.1') +
+        lNum('roll', i, 'rpm', d.rpm, '1') + lNum('roll', i, 'auxPM', d.auxPM, '0.1') +
+        lDel('roll', i);
     }).join('') + '</div>' + lAdd('roll', '新增一档') + '</div>';
 
   /* 3 车头实际工时 */
@@ -3824,20 +3997,24 @@ function renderLaborRules() {
 
   /* 4 酸洗节拍 */
   h += '<div class="ltab"><h4>酸洗节拍（按材质，分/吨）</h4>' +
-    lHead('1fr 74px 26px', ['材质', '分/吨', ''], 1) +
-    '<div class="ldraw" style="grid-template-columns:1fr 74px 26px;border:0;padding:0">' +
+    '<div class="lfml">酸洗 分/米 = 节拍 分/吨 ÷（成品长 × 支数）× 人班；支数填 0 = 按分包单重/定额自动算</div>' +
+    lHead('1fr 62px 62px 62px 24px', ['材质', '外径 Φ≥', '支数 支/包', '分/吨', ''], 2) +
+    '<div class="ldraw" style="grid-template-columns:1fr 62px 62px 62px 24px;border:0;padding:0">' +
     L.pickMin.map(function (d, i) {
       return '<input class="ltx" type="text" data-lt="pickMin" data-li="' + i + '" data-lf="code" value="' + esc(d.code) + '">' +
+        lNum('pickMin', i, 'od', d.od, '1') + lNum('pickMin', i, 'parts', d.parts, '1') +
         lNum('pickMin', i, 'v', d.v, '1') + lDel('pickMin', i);
     }).join('') + '</div>' + lAdd('pickMin', '新增一种材质') + '</div>';
 
   /* 5 矫直 */
-  h += '<div class="ltab"><h4>矫直（按成品外径，分/米）</h4>' +
-    lHead('30px 76px 70px 26px', ['Φ≥', '成品外径', '分/米', ''], 1) +
-    '<div class="ldraw" style="grid-template-columns:30px 76px 70px 26px;border:0;padding:0">' +
+  h += '<div class="ltab"><h4>矫直（按成品外径）</h4>' +
+    '<div class="lfml">矫直工时 = 普通工时 ＋（高强/耐磨材质 H*、*W 才加）特殊工时；× 人班</div>' +
+    lHead('34px 66px 86px 86px 24px', ['Φ≥', '成品外径', '普通工时 分/米', '特殊工时 分/米', ''], 2) +
+    '<div class="ldraw" style="grid-template-columns:34px 66px 86px 86px 24px;border:0;padding:0">' +
     L.straight.map(function (d, i) {
       return '<span class="lb">Φ≥</span>' + lNum('straight', i, 'od', d.od, '1') +
-        lNum('straight', i, 'm', d.m, '0.001') + lDel('straight', i);
+        lNum('straight', i, 'm', d.m, '0.001') + lNum('straight', i, 'm2', d.m2, '0.001') +
+        lDel('straight', i);
     }).join('') + '</div>' + lAdd('straight', '新增一档') + '</div>';
 
   /* 6 退火 */
@@ -3859,19 +4036,49 @@ function renderLaborRules() {
     row({ lb: '探伤 分/支', t: 'sc', i: '-', f: 'inspect', v: L.inspect, step: '0.001' }) +
     '</div></div>';
 
-  /* 9 自动点校 */
-  h += '<div class="ltab"><h4>自动点校</h4><div class="lgrid" style="grid-template-columns:repeat(2,1fr)">' +
-    row({ lb: '自动点校 分/支', t: 'sc', i: '-', f: 'spot', v: L.spot, step: '0.001' }) +
-    '</div></div>';
+  /* 9 自动点校（OD / 支班 / 辅助 / 标准工时 —— 四列数据，直接能看算法） */
+  var labLen = (S.labor && S.labor.len > 0) ? S.labor.len : ((computeLabor().len) || 0);
+  h += '<div class="ltab"><h4>自动点校（按成品外径分档）</h4>' +
+    '<div class="lfml">标准工时 分/米 = 上班时间 × 60 ÷ 支/班 ÷ 成品长' +
+      (labLen ? '（' + dec2(labLen) + ' m）' : '（成品长待填）') + ' ＋ 辅助 分/支 ÷ 成品长</div>' +
+    lHead('34px 64px 70px 78px 82px 24px', ['Φ≥', '成品外径', '支/班', '辅助 分/支', '标准工时 分/米', ''], 2) +
+    '<div class="ldraw" style="grid-template-columns:34px 64px 70px 78px 82px 24px;border:0;padding:0">' +
+    L.spotTab.map(function (d, i) {
+      var p = Math.max(1, Number(d.parts) || 1), ax = Math.max(0, Number(d.aux) || 0);
+      var std = labLen > 0 ? (shiftNow * 60 / p) / labLen + ax / labLen : 0;
+      return '<span class="lb">Φ≥</span>' + lNum('spotTab', i, 'od', d.od, '1') +
+        lNum('spotTab', i, 'parts', d.parts, '1') + lNum('spotTab', i, 'aux', d.aux, '0.1') +
+        '<span class="lc">' + (std ? dec3(std) : '—') + '</span>' + lDel('spotTab', i);
+    }).join('') + '</div>' + lAdd('spotTab', '新增一档') + '</div>';
 
-  /* 10 冷轧送进参数 */
-  h += '<div class="ltab"><h4>冷轧送进参数（按毛管壁厚）</h4>' +
-    lHead('34px 76px 70px 66px 26px', ['壁厚≥', '上限 mm', '送进量 mm', '辅助 分/支', ''], 1) +
-    '<div class="ldraw" style="grid-template-columns:34px 76px 70px 66px 26px;border:0;padding:0">' +
-    L.stepFeed.map(function (d, i) {
-      return '<span class="lb">壁厚≥</span>' + lNum('stepFeed', i, 'wall', d.wall, '0.1') +
-        lNum('stepFeed', i, 'feed', d.feed, '1') + lNum('stepFeed', i, 'aux', d.aux, '0.1') + lDel('stepFeed', i);
-    }).join('') + '</div>' + lAdd('stepFeed', '新增一档') + '</div>';
+  /* 11 / 12 火焰切割、激光切割 */
+  [['flame', '火焰切割工时'], ['laser', '激光切割工时']].forEach(function (g) {
+    var kind = g[0], C = L.cut[kind], r = computeCut(kind);
+    h += '<div class="ltab"><h4>' + g[1] + '</h4>' +
+      '<div class="lfml">切割速度 v = 基准速度 ×（基准板厚 ÷ 板厚）^板厚指数；标准工时 = 外形长度 ÷ v ＋ 孔数 × 穿孔 ÷ 60 ＋ 辅助；换型时间按机台取</div>' +
+      '<div class="lcutin">' +
+        '<div class="lit"><span class="lb">机台</span><select data-cut="' + kind + '" data-cf="mach">' +
+          (C.machines || []).map(function (m) {
+            return '<option value="' + esc(m.name) + '"' + (m.name === C.mach ? ' selected' : '') + '>' + esc(m.name) + '</option>';
+          }).join('') + '</select></div>' +
+        '<div class="lit"><span class="lb">板厚 mm</span><input type="number" step="0.5" min="0.5" data-cut="' + kind + '" data-cf="t" value="' + esc(C.t) + '"></div>' +
+        '<div class="lit"><span class="lb">外形长度 mm</span><input type="number" step="10" min="0" data-cut="' + kind + '" data-cf="len" value="' + esc(C.len) + '"></div>' +
+        '<div class="lit"><span class="lb">孔数量</span><input type="number" step="1" min="0" data-cut="' + kind + '" data-cf="holes" value="' + esc(C.holes) + '"></div>' +
+      '</div>' +
+      (r ? '<div class="lcout"><b>标准工时 ' + dec1(r.std) + ' 分</b><span class="sub2">切割 ' + dec1(r.cutT) +
+        ' ＋ 穿孔 ' + dec1(r.pierceT) + ' ＋ 辅助 ' + dec1(r.aux) + '；速度 ' + dec0(r.v) + ' mm/min</span>' +
+        '<b>换型时间 ' + dec1(r.setup) + ' 分</b></div>' : '') +
+      '<div class="lfml" style="margin-top:10px">机台参数（可改，改完立即按新参数算）</div>' +
+      lHead('1fr 76px 62px 58px 58px 56px 56px 24px', ['机台', '基准速度 mm/min', '基准板厚', '板厚指数', '穿孔 s/孔', '辅助 min', '换型 min', ''], 1) +
+      '<div class="ldraw" style="grid-template-columns:1fr 76px 62px 58px 58px 56px 56px 24px;border:0;padding:0">' +
+      (C.machines || []).map(function (m, i) {
+        return '<input class="ltx" type="text" data-cm="' + kind + '" data-ci="' + i + '" data-cf="name" value="' + esc(m.name) + '">' +
+          cNum(kind, i, 'v0', m.v0, '10') + cNum(kind, i, 't0', m.t0, '0.5') + cNum(kind, i, 'k', m.k, '0.05') +
+          cNum(kind, i, 'pierce', m.pierce, '0.5') + cNum(kind, i, 'aux', m.aux, '0.5') + cNum(kind, i, 'setup', m.setup, '1') +
+          '<button class="delx" type="button" data-cdel="' + kind + '" data-ci="' + i + '" aria-label="删除机台">×</button>';
+      }).join('') + '</div>' +
+      '<div class="lbar"><button type="button" class="addb" data-cadd="' + kind + '">+ 新增机台</button></div></div>';
+  });
 
   box.innerHTML = h;
 }
@@ -3971,6 +4178,27 @@ function bindLabor() {
       DB.labor.roundsManual[k] = true;
       persist(); renderLabor(); return;
     }
+    /* ---- 火焰 / 激光切割：面板输入与机台参数 ---- */
+    if (t.hasAttribute('data-cut')) {
+      var ck = t.getAttribute('data-cut'), cf = t.getAttribute('data-cf'), CC = DB.labor.cut[ck];
+      if (cf === 'mach') CC.mach = t.value;
+      else { var cv = parseFloat(t.value); if (Number.isFinite(cv)) CC[cf] = Math.max(0, cv); }
+      persist(); renderLaborRules(); return;
+    }
+    if (t.hasAttribute('data-cm')) {
+      var ck2 = t.getAttribute('data-cm'), ci = Number(t.getAttribute('data-ci')), cf2 = t.getAttribute('data-cf');
+      var CK = DB.labor.cut[ck2], arrC = CK.machines;
+      if (!arrC[ci]) return;
+      if (cf2 === 'name') {
+        var oldName = arrC[ci].name, nn = String(t.value).trim() || oldName;
+        arrC[ci].name = nn;
+        if (CK.mach === oldName) CK.mach = nn;      /* 改名后保持选中 */
+      } else {
+        var cv2 = parseFloat(t.value);
+        if (Number.isFinite(cv2)) arrC[ci][cf2] = Math.max(0, cv2);
+      }
+      persist(); renderLaborRules(); return;
+    }
     var lt = t.getAttribute('data-lt');
     if (lt) {
       var li = t.getAttribute('data-li'), lf = t.getAttribute('data-lf'), raw = t.value;
@@ -4005,10 +4233,11 @@ function bindLabor() {
       var key = ad.getAttribute('data-ladd'), arr = DB.labor[key], last = arr[arr.length - 1] || {};
       var nw;
       if (key === 'draw') nw = { hi: (Number(last.hi) || 0) + 30, m: last.m, aux: last.aux, refLen: last.refLen };
-      else if (key === 'roll') nw = { wall: (Number(last.wall) || 0) + 5, m: last.m };
+      else if (key === 'roll') nw = { wall: (Number(last.wall) || 0) + 5, m: last.m, feed: last.feed, rpm: last.rpm, auxPM: last.auxPM };
       else if (key === 'partsOD') nw = { od: (Number(last.od) || 0) + 30, parts: last.parts };
-      else if (key === 'pickMin') nw = { code: '新牌号', v: last.v };
-      else if (key === 'straight') nw = { od: (Number(last.od) || 0) + 30, m: last.m };
+      else if (key === 'pickMin') nw = { code: '新牌号', v: last.v, od: last.od || 0, parts: last.parts || 0 };
+      else if (key === 'straight') nw = { od: (Number(last.od) || 0) + 30, m: last.m, m2: last.m2 || 0 };
+      else if (key === 'spotTab') nw = { od: (Number(last.od) || 0) + 40, parts: Math.max(30, Math.round((Number(last.parts) || 300) * 0.85)), aux: last.aux || 0 };
       else if (key === 'stepFeed') nw = { wall: (Number(last.wall) || 0) + 4, feed: last.feed, aux: last.aux };
       else return;
       arr.push(nw);
@@ -4028,6 +4257,30 @@ function bindLabor() {
       } else {
         toast('每个分项至少保留一行');
       }
+      return;
+    }
+    /* 切割机台：新增 / 删除 */
+    var ca = el.closest ? el.closest('[data-cadd]') : null;
+    if (ca) {
+      var kk = ca.getAttribute('data-cadd'), mArr = DB.labor.cut[kk].machines;
+      var lm = mArr[mArr.length - 1] || {};
+      mArr.push({
+        name: (kk === 'flame' ? '火焰 ' : '激光 ') + (mArr.length + 1) + '#',
+        v0: Number(lm.v0) || 400, t0: Number(lm.t0) || 10, k: Number(lm.k) || 1.2,
+        pierce: Number(lm.pierce) || 5, aux: Number(lm.aux) || 3, setup: Number(lm.setup) || 20
+      });
+      persist(); renderLaborRules(); toast('已新增机台，可改参数');
+      return;
+    }
+    var cd = el.closest ? el.closest('[data-cdel]') : null;
+    if (cd) {
+      var kk2 = cd.getAttribute('data-cdel'), i3 = +cd.getAttribute('data-ci');
+      var CK2 = DB.labor.cut[kk2], arr2 = CK2.machines;
+      if (arr2.length <= 1) { toast('至少保留一台机台'); return; }
+      var delName = arr2[i3] && arr2[i3].name;
+      arr2.splice(i3, 1);
+      if (CK2.mach === delName) CK2.mach = arr2[0].name;
+      persist(); renderLaborRules(); toast('已删除该机台');
     }
   });
   ['w-od', 'w-id', 'w-wall', 'w-len', 'w-g', 'w-h', 'w-glen', 'w-pass', 'w-shift', 'w-batch', 'w-parts'].forEach(function (id) {
@@ -4218,7 +4471,7 @@ function renderPush(res) {
     '<div class="po"><div class="k">σs' + (o.hotOn ? '（热挤折减）' : '') + '</div><div class="v">' + f0(o.ys) + '<small>MPa</small></div></div>' +
     '<div class="concl ' + o.st + '"><b>' + esc(o.title) + '</b>' + (o.msg ? '　' + esc(o.msg) : '') +
     '　<span style="color:#737C82">（' + esc(o.mat || '未选材质') + ' 屈服 ' + f0(o.ysNom) + ' MPa；' + angTxt +
-    '；m=' + f2(o.k) + '；' + (o.mach ? esc(o.mach) + ' ' + f0(o.cap) + ' kN' : '未填挤头能力，暂按 ' + f0(o.cap) + ' kN') +
+    '；m=' + f2(o.k) + '；' + (o.mach ? esc(o.mach) + ' 挤头能力 ' + f0(o.cap) + ' kN' : '未填挤头能力，暂按 ' + f0(o.cap) + ' kN') +
     '；安全系数 ' + f1(o.sf) + '；变形区+导入需 ≥ ' + f0(o.needLen) + ' mm）</span></div>';
 }
 
