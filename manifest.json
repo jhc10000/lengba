@@ -1,0 +1,30 @@
+{
+  "name": "钢管冷拔工艺计算",
+  "short_name": "冷拔工艺",
+  "description": "冷拔/冷轧管工艺计算、工时定额、工艺卡出图",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "any",
+  "background_color": "#F7F7F4",
+  "theme_color": "#1D4F8C",
+  "lang": "zh-CN",
+  "icons": [
+    {
+      "src": "/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png"
+    },
+    {
+      "src": "/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png"
+    },
+    {
+      "src": "/icon-1024.png",
+      "sizes": "1024x1024",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ]
+}
