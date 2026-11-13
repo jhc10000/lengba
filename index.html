@@ -4072,16 +4072,23 @@ function renderLaborRules() {
         '<span class="lc">' + dec3(tt) + '</span>' + lDel('draw', i);
     }).join('') + '</div>' + lAdd('draw', '新增一档') + '</div>';
 
-  /* 2 冷轧工时（进给量/冲次/辅助 已并入本表，不再单列「冷轧送进参数」） */
+  /* 2 冷轧工时（进给量/冲次/辅助 已并入本表，不再单列「冷轧送进参数」）
+     合计口径：按「进给量 × 冲次」实算；左边「分/米参考」只作定额对照，不参与计算 */
+  var rollRef = computeLabor();
+  var rollGlen = (rollRef && rollRef.glen > 0) ? rollRef.glen : 0;
+  var rollLen = (rollRef && rollRef.len > 0) ? rollRef.len : 0;
   h += '<div class="ltab"><h4>冷轧工时（按毛管壁厚分档）</h4>' +
-    '<div class="lfml">轧制 分/米 = 坯管长 ÷（进给量 × 冲次）÷ 成品长；辅助 分/米 = 辅助 分/支 ÷ 坯管长；标准工时 =（两者之和）× 人班 × 道次</div>' +
-    lHead('40px 60px 64px 60px 58px 62px 24px', ['壁厚≥', '上限 mm', '分/米参考', '进给量 mm', '冲次/min', '辅助 分/支', ''], 1) +
-    '<div class="ldraw" style="grid-template-columns:40px 60px 64px 60px 58px 62px 24px;border:0;padding:0">' +
+    '<div class="lfml">轧制 分/米 = 坯管长 ÷（进给量 × 冲次）÷ 成品长；辅助 分/米 = 辅助 分/支 ÷ 坯管长；' +
+      '标准工时 =（两者之和）× 人班 × 道次。<b>合计按「实算」列</b>，「分/米参考」只作定额对照</div>' +
+    lHead('40px 58px 62px 58px 56px 60px 70px 24px', ['壁厚≥', '上限 mm', '分/米参考', '进给量 mm', '冲次/min', '辅助 分/支', '实算 分/米', ''], 1) +
+    '<div class="ldraw" style="grid-template-columns:40px 58px 62px 58px 56px 60px 70px 24px;border:0;padding:0">' +
     L.roll.map(function (d, i) {
+      var fd = Number(d.feed) || 7, rp = Number(d.rpm) || 40;
+      var real = (rollGlen > 0 && rollLen > 0) ? (rollGlen * 1000) / (fd * rp) / rollLen : 0;
       return '<span class="lb">壁厚≥</span>' + lNum('roll', i, 'wall', d.wall, '0.1') +
         lNum('roll', i, 'm', d.m, '0.001') + lNum('roll', i, 'feed', d.feed, '0.1') +
         lNum('roll', i, 'rpm', d.rpm, '1') + lNum('roll', i, 'aux', d.aux, '0.1') +
-        lDel('roll', i);
+        '<span class="lc">' + (real ? dec3(real) : '—') + '</span>' + lDel('roll', i);
     }).join('') + '</div>' + lAdd('roll', '新增一档') + '</div>';
 
   /* 3 车头实际工时 */
