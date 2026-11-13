@@ -423,6 +423,10 @@ table.hours td .hcell:focus{outline:0;border-bottom-color:var(--steel);backgroun
   padding:4px 8px;margin:0 0 6px;border-radius:0 4px 4px 0}
 /* 宽表在窄屏横向滚动，表头与数据一起滚，不挤压 */
 .ltab .lscroll{overflow-x:auto;-webkit-overflow-scrolling:touch}
+/* 基础数据：分包与支数双表并排 */
+.packsplit{display:grid;grid-template-columns:1fr 1fr;gap:20px}
+@media(max-width:900px){.packsplit{grid-template-columns:1fr}}
+.packtitle{font-size:11.5px;font-weight:700;color:var(--ink2);margin:2px 0 6px}
 @media(max-width:560px){
   .ltabs{columns:1}
   /* 窄屏：整块可横向滑动，标题与说明钉在左边，表格跟着手指划 */
@@ -1422,6 +1426,39 @@ table.cmp .worse{color:#AB2A20}
           </table>
           <div style="font-size:11.5px;color:var(--ink3);margin-top:8px;line-height:1.5">
             单位 mm。上下限为偏差值本身（内径公差为负值）。分档按内径下限判定；标准未覆盖的中间区间沿用其下一档。
+          </div>
+        </div>
+      </div>
+
+      <div class="dbox">
+        <div class="dbox-hd">
+          <h3>分包与支数</h3>
+          <span class="sub">均按「坯料外径」分档；酸洗支数、车头支数都从这里取</span>
+          <div class="act"><button type="button" class="mini pri" id="btn-add-pack">新增档</button></div>
+        </div>
+        <div class="dbox-body">
+          <div class="packsplit">
+            <div>
+              <div class="packtitle">分包表 · 每包支数（酸洗用）</div>
+              <table class="dt">
+                <colgroup><col style="width:26%"><col style="width:26%"><col style="width:40%"><col style="width:8%"></colgroup>
+                <thead><tr><th>坯料外径 Φ≥</th><th>支/包</th><th class="l">当前取值</th><th></th></tr></thead>
+                <tbody id="packbody"></tbody>
+              </table>
+            </div>
+            <div>
+              <div class="packtitle">车头支数 · 支/班（按坯料外径）</div>
+              <table class="dt">
+                <colgroup><col style="width:26%"><col style="width:26%"><col style="width:40%"><col style="width:8%"></colgroup>
+                <thead><tr><th>坯料外径 Φ≥</th><th>支/班</th><th class="l">车头工时 分/米</th><th></th></tr></thead>
+                <tbody id="partsodbody"></tbody>
+              </table>
+            </div>
+          </div>
+          <div style="font-size:11.5px;color:#737C82;margin-top:8px;line-height:1.5">
+            取档规则：取「Φ≥ ≤ 坯料外径」的最大档。分包单重
+            <input id="pack-weight" type="number" step="100" min="0" style="width:74px;border:1px solid #C8CDD2;border-radius:4px;padding:2px 5px;font:inherit">
+            kg 仅用于显示参考（实际支数以本表为准）。车头工时 = 上班时间×60÷支数÷成品长。
           </div>
         </div>
       </div>
@@ -3188,6 +3225,48 @@ function renderSheet2(res, card) {
 }
 
 /* ============================ 渲染：基础数据 ============================ */
+/* 基础数据 → 分包与支数（均按坯料外径分档） */
+function renderPack() {
+  var L = DB.labor, pb = $('packbody'), ob = $('partsodbody');
+  if (!pb || !ob || !L) return;
+  var gEl = $('f-d0'), g = gEl ? parseFloat(gEl.value) : NaN;
+  if (!Number.isFinite(g)) g = 0;
+  var lab = S.labor || (typeof computeLabor === 'function' ? computeLabor() : null);
+  var len = (lab && lab.len > 0) ? lab.len : 0;
+  var shiftH = Number(L.shiftH) || 11;
+  var oneWt = (lab && lab.partWt > 0) ? lab.partWt : 0;       /* 单支重 kg */
+
+  var actPack = tierOf(L.pack, g, 'od'), actPo = tierOf(L.partsOD, g, 'od');
+
+  pb.innerHTML = (L.pack || []).map(function (d, i) {
+    var isAct = actPack === d;
+    var wt = oneWt > 0 ? (Number(d.parts) || 0) * oneWt : 0;
+    return '<tr' + (isAct ? ' style="background:#F2F7FD"' : '') + '>' +
+      '<td><input data-pk="' + i + '" data-k="od" type="number" step="5" min="0" value="' + d.od + '"></td>' +
+      '<td><input data-pk="' + i + '" data-k="parts" type="number" step="1" min="1" value="' + d.parts + '"></td>' +
+      '<td class="l dim" style="font-size:11.5px">' +
+        (isAct ? '<b style="color:#1D4F8C">← 当前 Φ' + dec0(g) + ' 用这一档</b>' : '') +
+        (wt > 0 ? (isAct ? '　' : '') + '包重 ' + dec2(wt) + ' kg' : '') +
+      '</td>' +
+      '<td><button class="del" data-delpk="' + i + '" title="删除">×</button></td></tr>';
+  }).join('') || '<tr><td colspan="4" style="color:#868F95;font-size:12px;padding:10px 0">还没有分包档</td></tr>';
+
+  ob.innerHTML = (L.partsOD || []).map(function (d, i) {
+    var isAct = actPo === d;
+    var mins = (len > 0 && Number(d.parts) > 0) ? (shiftH * 60 / Number(d.parts)) / len : 0;
+    return '<tr' + (isAct ? ' style="background:#F2F7FD"' : '') + '>' +
+      '<td><input data-po="' + i + '" data-k="od" type="number" step="5" min="0" value="' + d.od + '"></td>' +
+      '<td><input data-po="' + i + '" data-k="parts" type="number" step="0.5" min="1" value="' + d.parts + '"></td>' +
+      '<td class="l dim" style="font-size:11.5px">' +
+        (mins ? dec3(mins) + '　' : '') +
+        (isAct ? '<b style="color:#1D4F8C">← 当前</b>' : '') +
+      '</td>' +
+      '<td><button class="del" data-delpo="' + i + '" title="删除">×</button></td></tr>';
+  }).join('') || '<tr><td colspan="4" style="color:#868F95;font-size:12px;padding:10px 0">还没有支数档</td></tr>';
+
+  if ($('pack-weight') && document.activeElement !== $('pack-weight')) $('pack-weight').value = Number(L.pickWeight) || 0;
+}
+
 function renderData() {
   var mb = $('matbody');
   var kw = (S.matFilter || '').trim().toLowerCase();
@@ -3215,6 +3294,8 @@ function renderData() {
       '<td><input class="txt" data-tl="' + i + '" data-k="note" value="' + esc(t.note || '') + '"></td>' +
       '<td><button class="del" data-deltol="' + i + '" title="删除">×</button></td></tr>';
   }).join('');
+
+  renderPack();
 
   $('mechbody').innerHTML = DB.mech.map(function (m, i) {
     return '<tr>' +
@@ -3754,17 +3835,20 @@ function computeLabor() {
   });
   if (strT) {
     var sM = Number(strT.m) || 0, sM2 = Number(strT.m2) || 0;
-    /* 高强/耐磨等难矫直材质（H 开头或 W 结尾）加计特殊工时 */
-    var sSpecial = /^H\d/i.test(f.mat || '') || /W$/i.test(f.mat || '');
-    var sUse = sM + (sSpecial ? sM2 : 0);
+    /* 高强度钢（H 系：H345W/H525W/H550W/H690W…）取【特殊工时】列，其余取【普通工时】列；是替代关系，不相加 */
+    var sHi = /^H\d/i.test(f.mat || '');
+    var sUse = sHi ? sM2 : sM;
+    var sFall = false;
+    if (sHi && !(sUse > 0) && sM > 0) { sUse = sM; sFall = true; }   /* 特殊工时没填，先按普通工时兜底，备注里提示 */
     add({
       k: 'straight', name: '矫直', on: !!L.on.straight, man: Number(L.man.straight) || 0,
       prep: Number(L.prep.straight) || 0,
-      machTxt: 'Φ' + dec0(strT.od) + ' 档 · 普通 ' + dec3(sM) + (sM2 ? ' · 特殊 ' + dec3(sM2) : ''),
-      proc: sM, aux: sSpecial ? sM2 : 0, std: sUse * (Number(L.man.straight) || 0),
-      note: sSpecial
-        ? '高强钢加计特殊工时：' + dec3(sM) + ' + ' + dec3(sM2) + ' = ' + dec3(sUse)
-        : '普通工时 ' + dec3(sM) + '（材质非高强，不计特殊）'
+      machTxt: 'Φ' + dec0(strT.od) + ' 档 · ' + (sHi ? '特殊 ' : '普通 ') + dec3(sUse) +
+        '（普通 ' + dec3(sM) + ' / 特殊 ' + dec3(sM2) + '）',
+      proc: sUse, aux: 0, std: sUse * (Number(L.man.straight) || 0),
+      note: (sHi ? '高强钢 → 取特殊工时 ' + dec3(sM2) : '普通钢 → 取普通工时 ' + dec3(sM)) +
+        (sFall ? '（特殊工时未填，暂按普通工时 ' + dec3(sM) + '）' : '') +
+        ' × 人班 ' + dec0(L.man.straight)
     });
   }
   add({
@@ -4026,7 +4110,7 @@ function renderLaborRules() {
 
   /* 5 矫直 */
   h += '<div class="ltab"><h4>矫直（按成品外径）</h4>' +
-    '<div class="lfml">矫直工时 = 普通工时 ＋（高强/耐磨材质 H*、*W 才加）特殊工时；× 人班</div>' +
+    '<div class="lfml">高强度钢（H 系：H345W / H525W / H550W / H690W…）取【特殊工时】这一列，其余钢材取【普通工时】这一列；两列二选一，不相加</div>' +
     lHead('34px 66px 86px 86px 24px', ['Φ≥', '成品外径', '普通工时 分/米', '特殊工时 分/米', ''], 2) +
     '<div class="ldraw" style="grid-template-columns:34px 66px 86px 86px 24px;border:0;padding:0">' +
     L.straight.map(function (d, i) {
@@ -4823,6 +4907,19 @@ function bindEvents() {
       persist();
       fillRoutes();
       renderSheetSoon();
+    } else if (t.hasAttribute('data-pk') || t.hasAttribute('data-po')) {
+      var pk = t.hasAttribute('data-pk') ? 'pack' : 'partsOD';
+      var pi = +t.getAttribute(t.hasAttribute('data-pk') ? 'data-pk' : 'data-po');
+      var pkf = t.getAttribute('data-k'), pv = parseFloat(t.value);
+      if (Number.isFinite(pv) && DB.labor[pk] && DB.labor[pk][pi]) {
+        DB.labor[pk][pi][pkf] = Math.max(0, pv);
+        DB.labor[pk].sort(function (a, b) { return (Number(a.od) || 0) - (Number(b.od) || 0); });
+        persist();
+        renderAll();
+      }
+    } else if (t.id === 'pack-weight') {
+      var pw = parseFloat(t.value);
+      if (Number.isFinite(pw)) { DB.labor.pickWeight = Math.max(0, pw); persist(); renderAll(); }
     } else if (t.hasAttribute('data-tl')) {
       var ti = +t.getAttribute('data-tl'), tk = t.getAttribute('data-k');
       if (tk === 'note') { DB.tolerances[ti].note = t.value; persist(); }
@@ -4917,6 +5014,13 @@ function bindEvents() {
     } else if (t.hasAttribute('data-deltol')) {
       if (DB.tolerances.length <= 1) { toast('至少保留一档公差'); return; }
       DB.tolerances.splice(+t.getAttribute('data-deltol'), 1);
+      persist(); renderData(); renderAll();
+    } else if (t.hasAttribute('data-delpk') || t.hasAttribute('data-delpo')) {
+      var isPk = t.hasAttribute('data-delpk');
+      var arrPk = isPk ? DB.labor.pack : DB.labor.partsOD;
+      var idxPk = +(t.getAttribute(isPk ? 'data-delpk' : 'data-delpo'));
+      if (arrPk.length <= 1) { toast('至少保留一档'); return; }
+      arrPk.splice(idxPk, 1);
       persist(); renderData(); renderAll();
     } else if (t.hasAttribute('data-delmech')) {
       DB.mech.splice(+t.getAttribute('data-delmech'), 1);
@@ -5072,6 +5176,16 @@ function bindEvents() {
     persist(); renderData();
     var first = $('mechbody').querySelector('input');
     if (first) { first.focus(); first.select(); }
+  });
+  if ($('btn-add-pack')) $('btn-add-pack').addEventListener('click', function () {
+    var last = DB.labor.pack[DB.labor.pack.length - 1] || { od: 0, parts: 24 };
+    DB.labor.pack.push({ od: (Number(last.od) || 0) + 40, parts: Math.max(1, Math.round((Number(last.parts) || 24) * 0.7)) });
+    DB.labor.pack.sort(function (a, b) { return (Number(a.od) || 0) - (Number(b.od) || 0); });
+    var last2 = DB.labor.partsOD[DB.labor.partsOD.length - 1] || { od: 0, parts: 20 };
+    DB.labor.partsOD.push({ od: (Number(last2.od) || 0) + 40, parts: Math.max(1, Math.round((Number(last2.parts) || 20) * 0.8) * 2) / 2 });
+    DB.labor.partsOD.sort(function (a, b) { return (Number(a.od) || 0) - (Number(b.od) || 0); });
+    persist(); renderData(); renderAll();
+    toast('分包表 / 车头支数 各加了一档');
   });
   $('btn-add-route').addEventListener('click', function () {
     DB.routes.push({ name: '新路线', steps: ['酸洗', '冷拔', '退火', '矫直', '探伤'] });
