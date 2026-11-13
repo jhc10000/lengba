@@ -3639,17 +3639,23 @@ function computeLabor() {
   var packT = tierOf(L.pack, f.g, 'od') || { parts: 24 };
   var packParts = Math.min(L.pickWeight / partWt, packT.parts);
   if (!(packParts > 0)) packParts = 1;
-  /* 酸洗节拍按「材质 + 外径档」找行：先取该材质下 od ≤ 成品外径 的最大档 */
+  /* ---- 酸洗两步走 ----
+     ① 按「材质」取节拍 分/批（同材质多行时取外径档最小的那行作为该材质节拍）
+     ② 按「坯料外径」取支数：先在该材质的行里按 od ≤ 坯料外径 取最大档；该材质没填支数就按分包表（也是按坯料外径分档）
+     → 酸洗工时 分/米 = 节拍 分/批 ÷ 支数 ÷ 成品长 × 人数 */
   var pickRows = (L.pickMin || []).filter(function (p) { return p.code === f.mat; });
   var pickRow = null;
   pickRows.forEach(function (p) {
-    if (Number(p.od) <= f.od && (!pickRow || Number(p.od) >= Number(pickRow.od))) pickRow = p;
+    if (!pickRow || Number(p.od) < Number(pickRow.od)) pickRow = p;
   });
-  if (!pickRow && pickRows.length) pickRow = pickRows[0];
-  var pickBatch = pickRow ? Number(pickRow.v) : null;          /* 节拍 分/批 */
-  /* 支数：优先用该行（对应外径档）填的支数，没填就按分包重/定额自动算 */
-  var pickParts = (pickRow && Number(pickRow.parts) > 0) ? Number(pickRow.parts) : packParts;
-  if (!(pickParts > 0)) pickParts = 1;
+  var pickBatch = pickRow ? Number(pickRow.v) : null;            /* 分/批，只看材质 */
+  var pickPPRow = null;
+  pickRows.forEach(function (p) {
+    if (Number(p.parts) > 0 && Number(p.od) <= f.g && (!pickPPRow || Number(p.od) >= Number(pickPPRow.od))) pickPPRow = p;
+  });
+  var pickParts = pickPPRow ? Number(pickPPRow.parts) : Number(packT.parts);   /* 按坯料外径 */
+  var pickPartsFrom = pickPPRow ? '节拍表 Φ≥' + dec0(pickPPRow.od) + ' 档' : '分包表 Φ≥' + dec0(packT.od) + ' 档';
+  if (!(pickParts > 0)) { pickParts = 1; pickPartsFrom = '默认 1 支'; }
   var drawT = tierHi(L.draw, f.od, 'hi');
   var rollT = tierOf(L.roll, f.h, 'wall');
   var strT = tierOf(L.straight, f.od, 'od');
@@ -3677,12 +3683,12 @@ function computeLabor() {
   add({
     k: 'pick', name: '酸洗', on: !!L.on.pick, man: Number(L.man.pick) || 0,
     prep: Number(L.prep.pick) || 0,
-    machTxt: (f.mat || '—') + ' · ' + dec1(pickBatchUse) + ' 分/批 · ' + dec1(pickParts) + ' 支/批' +
-      (pickRow && Number(pickRow.od) > 0 ? ' · Φ≥' + dec0(pickRow.od) : ''),
+    machTxt: (f.mat || '—') + ' · ' + dec1(pickBatchUse) + ' 分/批 · 坯料 Φ' + dec0(f.g) + ' → ' + dec1(pickParts) + ' 支/批',
     proc: pickBatchUse / pickParts / len, aux: 0,
     std: (pickBatchUse / pickParts / len) * (Number(L.man.pick) || 0),
-    note: '节拍 ' + dec1(pickBatchUse) + ' 分/批 ÷ ' + dec0(pickParts) + ' 支/批 ÷ 成品长 ' + dec2(len) +
-      ' m × 人数 ' + dec0(L.man.pick) + ' = ' + dec3(pickBatchUse / pickParts / len * (Number(L.man.pick) || 0)) + ' 分/米'
+    note: '① ' + (f.mat || '未选') + ' 节拍 ' + dec1(pickBatchUse) + ' 分/批；② 坯料 Φ' + dec0(f.g) + ' → ' + dec0(pickParts) +
+      ' 支（' + pickPartsFrom + '）；③ ' + dec1(pickBatchUse) + ' ÷ ' + dec0(pickParts) + ' ÷ 成品长 ' + dec2(len) +
+      ' × 人数 ' + dec0(L.man.pick) + ' = ' + dec3(pickBatchUse / pickParts / len * (Number(L.man.pick) || 0)) + ' 分/米'
   });
   /* 冷拔：拉拔工时（分/米）= 分/米定额 + 辅助 分/支 ÷ 参考长；标准工时 = 拉拔工时 × 人班 × 道次 */
   if (drawT) {
@@ -4008,8 +4014,8 @@ function renderLaborRules() {
     '</div></div>';
 
   /* 4 酸洗节拍 */
-  h += '<div class="ltab"><h4>酸洗节拍（按材质 + 外径，分/批）</h4>' +
-    '<div class="lfml">酸洗工时 分/米 = 节拍 分/批 ÷ 该外径对应支数 ÷ 成品长 × 人数；按「材质 + 成品外径」匹配行（同材质可多档），支数填 0 = 按分包单重自动算</div>' +
+  h += '<div class="ltab"><h4>酸洗节拍（分/批 · 按材质；支数按坯料外径）</h4>' +
+    '<div class="lfml">两步：① 按「材质」找节拍 分/批；② 按「坯料外径」找支数（本表 外径 列填坯料外径档，该材质没填支数则用分包表）→ 酸洗工时 分/米 = 分/批 ÷ 支数 ÷ 成品长 × 人数</div>' +
     lHead('1fr 62px 62px 62px 24px', ['材质', '外径 Φ≥', '支数 支/批', '分/批', ''], 2) +
     '<div class="ldraw" style="grid-template-columns:1fr 62px 62px 62px 24px;border:0;padding:0">' +
     L.pickMin.map(function (d, i) {
