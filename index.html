@@ -1136,15 +1136,13 @@ table.cmp .worse{color:#AB2A20}
             <span class="badge-s" id="push-tag"><i></i>—</span>
             <div class="act"><button type="button" class="mini" id="push-reset">恢复默认</button></div>
           </div>
-          <div class="sub">挤头（管端打头）力 P = m·σs·D_m·l，l = Δ / tanα；力随单边减径 Δ 线性增长，Δ 加倍则力加倍</div>
+          <div class="sub">挤头（管端打头）力 P = m·σs·D_m·l，l = Δ/tanα；力随单边减径 Δ 线性增长，Δ 加倍则力加倍。α 按<b>半角（单边）</b>填；挤头能力取「基础数据 → 机组能力」里的挤头能力列。</div>
           <div class="pushgrid">
             <label class="pf"><span>坯料外径 mm</span><input id="p-D" type="text" readonly value="—"></label>
             <label class="pf"><span>挤头后外径 mm</span><input id="p-d" type="number" step="0.1" min="0" value="" placeholder="自动"></label>
-            <label class="pf"><span>角度标注方式</span><select id="p-full"><option value="0">按半角填（单边）</option><option value="1">按全锥角填（双面）</option></select></label>
-            <label class="pf"><span id="p-angle-lbl">模锥半角 α °</span><input id="p-angle" type="number" step="0.5" min="1" value=""></label>
+            <label class="pf"><span>模锥半角 α °</span><input id="p-angle" type="number" step="0.5" min="1" value=""></label>
             <label class="pf"><span>压力系数 m</span><input id="p-k" type="number" step="0.05" min="0.5" value=""></label>
             <label class="pf"><span>挤头温度</span><select id="p-hot"><option value="0">冷挤</option><option value="1">热挤（σs×0.35）</option></select></label>
-            <label class="pf"><span>挤头所用机组（挤头能力见基础数据）</span><select id="p-mach"></select></label>
             <label class="pf"><span>安全系数</span><input id="p-sf" type="number" step="0.05" min="1" value=""></label>
             <label class="pf"><span>挤头段长度 mm</span><input id="p-len" type="number" step="10" min="1" value=""></label>
           </div>
@@ -2463,17 +2461,14 @@ function renderChain(res) {
   var pad = 30, top = 14;
   var n = items.length;
   var step = n > 1 ? (boxW - pad * 2) / (n - 1) : 0;
-  var rim = Math.min(26, Math.max(9, step * 0.32));
+  var rim = Math.min(30, Math.max(10, step * 0.34));
   var maxD = f.d0;
   var scale = rim / (maxD / 2);
   var midY = top + rim;
   var showDim = step >= 66;
 
-  /* 环内能放几号字：内孔直径够 34px 才写在环中，否则退到尺寸行下方 */
-  var needThird = items.some(function (it) {
-    return ((it.d - 2 * it.s) / 2) * scale * 2 < 34;
-  }) && showDim;
-  var H = needThird ? 118 : 106;
+  /* 环内面积字号自适应：能放进内孔就写在环里；太窄时面积单独占一行，避免与相邻图注重叠 */
+  var H = (showDim || step < 56) ? 106 : 94;
 
   var parts = [];
 
@@ -2495,21 +2490,30 @@ function renderChain(res) {
         '" y2="' + f2(midY) + '" stroke="#C9CDC6" stroke-width="1"/>');
       parts.push('<path d="M' + f2(cx + step - rim - 15) + ' ' + f2(midY - 3) + ' l5 3 l-5 3" fill="none" stroke="#868F95" stroke-width="1"/>');
     }
-    if (holeD >= 34) {
-      parts.push('<text x="' + f2(cx) + '" y="' + f2(midY + 3.4) + '" text-anchor="middle" font-size="9.5" fill="' +
-        (idx === 0 ? '#868F95' : col) + '" font-family="Bahnschrift, sans-serif">' + Math.round(area) + '</text>');
+    /* 面积：字号按内孔大小自适应，能塞进环里就塞，塞不下才附到图注后 */
+    var areaTxt = String(Math.round(area));
+    var fs = Math.max(6.5, Math.min(11, holeD * 0.46));
+    var usable = holeD * 0.88;
+    var estW = areaTxt.length * fs * 0.58;
+    if (estW > usable && usable > 0) fs = Math.max(6, fs * usable / estW);
+    var inRing = holeD >= 16 && areaTxt.length * fs * 0.58 <= usable + 0.2;
+    if (inRing) {
+      parts.push('<text x="' + f2(cx) + '" y="' + f2(midY + fs * 0.36) + '" text-anchor="middle" font-size="' +
+        f2(fs) + '" fill="' + (idx === 0 ? '#868F95' : col) + '" font-family="Bahnschrift, sans-serif">' +
+        areaTxt + '</text>');
     }
     var cap = it.k;
-    if (!showDim || holeD < 34) cap += ' · ' + Math.round(area);
+    var areaRow = !inRing && step < 56;      /* 图注太窄：面积另起一行，不再挤在同一行 */
+    if (!inRing && !areaRow) cap += ' · ' + areaTxt;
     parts.push('<text x="' + f2(cx) + '" y="' + f2(midY + rim + 16) + '" text-anchor="middle" font-size="10.5" fill="' +
       (idx === 0 ? '#868F95' : '#4C555B') + '" font-family="Microsoft YaHei UI, sans-serif">' + cap + '</text>');
+    if (areaRow) {
+      parts.push('<text x="' + f2(cx) + '" y="' + f2(midY + rim + (showDim ? 40 : 29)) + '" text-anchor="middle" font-size="9" fill="#737C82" font-family="Bahnschrift, sans-serif">' +
+        areaTxt + '</text>');
+    }
     if (showDim) {
       parts.push('<text x="' + f2(cx) + '" y="' + f2(midY + rim + 28) + '" text-anchor="middle" font-size="9.5" fill="#868F95" font-family="Bahnschrift, sans-serif">Φ' +
         f1(it.d) + '×' + f2(it.s) + '</text>');
-    }
-    if (needThird && holeD < 34) {
-      parts.push('<text x="' + f2(cx) + '" y="' + f2(midY + rim + 40) + '" text-anchor="middle" font-size="9" fill="#868F95" font-family="Bahnschrift, sans-serif">F ' +
-        Math.round(area) + '</text>');
     }
     if (it.anneal) {
       parts.push('<text x="' + f2(cx) + '" y="' + f2(top - 2) + '" text-anchor="middle" font-size="9" fill="#8F5B00" font-family="Microsoft YaHei UI, sans-serif">退火</text>');
@@ -4081,6 +4085,8 @@ function bindLabor() {
 /* ============================ 挤头力校核 ============================ */
 function pushParam() {
   if (!DB.push || typeof DB.push !== 'object') DB.push = clone(DEFAULT_DB.push);
+  /* 「角度标注方式」已从界面去掉，统一按半角（单边）算，避免老数据带 full=1 导致口径不一致 */
+  DB.push.full = 0;
   return DB.push;
 }
 
