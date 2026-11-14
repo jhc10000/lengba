@@ -473,6 +473,10 @@ table.hours td .hcell:focus{outline:0;border-bottom-color:var(--steel);backgroun
   background:#fff;font-size:13px;text-align:right;font-family:"Bahnschrift",sans-serif;
 }
 .cellinput:focus{outline:2px solid var(--steel);outline-offset:-1px}
+/* 模具表里没有对应规格时的提示色 */
+.cellinput.idwarn{color:#AB2A20;border-color:#E0B4AE;background:#FDF6F5;font-weight:700}
+.idwarn-txt{color:#AB2A20;font-weight:700}
+.idnote{font-size:10.5px;color:#8F5B00;display:block;line-height:1.25;margin-top:1px}
 .chk{display:inline-flex;align-items:center;gap:5px;font-size:11.5px;color:var(--ink2);min-height:32px;justify-content:flex-end}
 .chk input{width:16px;height:16px;accent-color:var(--steel)}
 
@@ -2772,13 +2776,23 @@ function renderTable(res) {
     } else {
       chk = r.anneal ? '<span class="badge-s warn" style="margin-left:6px"><i></i>退火</span>' : '';
     }
-    /* ID 列：模具清单里内模（冷轧为芯棒）的规格；手动微调时可直接改它，按模具实际尺寸反推壁厚 */
-    var idVal = (r.die && r.die.inn) ? String(r.die.inn.spec != null && r.die.inn.spec !== '' ? r.die.inn.spec : f1(r.die.inn.v)) : '';
+    /* ID 列：内模（冷轧为芯棒）尺寸。
+       模具表里有 → 显示规格；没有 → 显示按 D−2S 反推的尺寸，并标红提示「无模」 */
+    var idDia = Math.max(r.d - 2 * r.s, 0);
+    var innDie = (r.die && r.die.inn) ? r.die.inn : null;
+    var idSpec = innDie ? String(innDie.spec != null && innDie.spec !== '' ? innDie.spec : f1(innDie.v)) : '';
     var idCell;
     if (manual) {
-      idCell = '<td><input class="cellinput" id="mID' + r.i + '" data-id="' + (r.i - 1) + '" type="number" step="0.5" min="0" value="' + esc(idVal) + '" placeholder="—"></td>';
+      if (innDie) {
+        idCell = '<td><input class="cellinput" id="mID' + r.i + '" data-id="' + (r.i - 1) + '" type="number" step="0.5" min="0" value="' +
+          esc(idSpec) + '" title="模具表现成件 ' + esc(innDie.code) + '（实际尺寸 ' + f2(innDie.real != null ? innDie.real : innDie.v) + '）">';
+      } else {
+        idCell = '<td><input class="cellinput idwarn" id="mID' + r.i + '" data-id="' + (r.i - 1) + '" type="number" step="0.5" min="0" value="' +
+          f2(idDia) + '" title="模具表里没有这个内径的模；填一个规格可按现成模反推壁厚"><span class="idnote">无模</span>';
+      }
+      idCell += '</td>';
     } else {
-      idCell = '<td><span class="num">' + (idVal ? esc(idVal) : '—') + '</span></td>';
+      idCell = '<td><span class="num' + (innDie ? '' : ' idwarn-txt') + '">' + (idSpec || f2(idDia)) + '</span></td>';
     }
     rows.push('<tr' + trCls + '>' +
       '<td>' + r.i + '</td>' +
@@ -2823,25 +2837,36 @@ function renderTable(res) {
         renderAll();
       });
     });
-    /* ID 列反推：填内模（冷轧为芯棒）规格 → 按该模具的实际尺寸反算壁厚 */
+    /* ID 列反推：填内模（冷轧为芯棒）规格 → 按该模具实际尺寸反算壁厚；
+       模具表里没这个规格也照样反推（按填的数值当尺寸），只是提示需备新模 */
     Array.prototype.forEach.call(tb.querySelectorAll('input[data-id]'), function (inp) {
       inp.addEventListener('change', function () {
         var idx = parseInt(inp.getAttribute('data-id'), 10);
         var want = parseFloat(String(inp.value).replace(',', '.'));
         var p = S.passes[idx];
         if (!p || !Number.isFinite(want) || want <= 0) return;
-        var sets = dieSets(), hit = null;
+        var sets = dieSets(), hit = null, bestD = Infinity;
+        /* ① 先按规格精确找；② 找不到就找容差内最接近的现成模（和自动配模同一口径）；③ 都没有才按填的数当尺寸 */
         sets.inn.forEach(function (it) {
           var sv = parseFloat(String(it.spec == null ? '' : it.spec).replace(',', '.'));
           if (Number.isFinite(sv) && Math.abs(sv - want) < 0.02 && (!hit || it.real > hit.real)) hit = it;
         });
-        if (!hit) { toast('模具清单里没有规格 ' + want + ' 的' + (isRoll() ? '芯棒' : '内模') + '，壁厚未改'); inp.value = ''; renderAll(); return; }
-        var newS = rnd((p.D - hit.real) / 2, 2);
-        if (!(newS > 0.3)) { toast('反推出的壁厚 ' + newS + ' mm 不合理，请检查外径'); return; }
+        if (!hit) {
+          sets.inn.forEach(function (it) {
+            var d = Math.abs(it.v - want);
+            if (d <= DIE_TOL && d < bestD) { bestD = d; hit = it; }
+          });
+        }
+        var useD = hit ? hit.real : want;
+        var newS = rnd((p.D - useD) / 2, 2);
+        if (!(newS > 0.3)) { toast('反推出的壁厚 ' + f2(newS) + ' mm 不合理，请检查外径'); return; }
         S.passes[idx].S = newS;
-        S.focusId = inp.id;
         renderAll();
-        toast('ID ' + want + ' → 实际尺寸 ' + f2(hit.real) + ' mm → 第 ' + (idx + 1) + ' 道壁厚 ' + f2(newS) + ' mm');
+        if (hit) {
+          toast('ID ' + want + ' → 用现成模 ' + (hit.spec || f2(hit.v)) + '（实际 ' + f2(hit.real) + '）→ 第 ' + (idx + 1) + ' 道壁厚 ' + f2(newS) + ' mm');
+        } else {
+          toast('模具表无此尺寸，按 ' + f2(want) + ' mm 反推 → 第 ' + (idx + 1) + ' 道壁厚 ' + f2(newS) + ' mm（需备新模）');
+        }
       });
     });
   }
