@@ -518,6 +518,17 @@ table.passes td.cid .cellinput{display:block}
 .pushbox .table-head .act{margin-left:auto;display:flex;gap:6px}
 .pushbox .pushgrid{display:grid;grid-template-columns:repeat(3,1fr);gap:10px 14px;margin:8px 0 0}
 .pushbox .pf-wide{grid-column:1 / -1}
+/* 各道次机头校核小表 */
+.pushbox .pushper{margin-top:10px;border-top:1px dashed var(--line);padding-top:8px}
+.pushbox .pushper .ph{font-size:11.5px;color:var(--ink3);margin-bottom:5px;line-height:1.4}
+.pushbox .pushper table{width:100%;border-collapse:collapse;font-size:12px;font-variant-numeric:tabular-nums}
+.pushbox .pushper th,.pushbox .pushper td{padding:4px 6px;border-bottom:1px solid var(--line);text-align:right;white-space:nowrap}
+.pushbox .pushper th{color:var(--ink3);font-weight:600;font-size:11px;background:#FAFAF7}
+.pushbox .pushper th:first-child,.pushbox .pushper td:first-child{text-align:left}
+.pushbox .pushper tr.bad td{color:#AB2A20;font-weight:700;background:#FDF6F5}
+.pushbox .pushper tr.warn td{color:#8F5B00}
+.pushbox .pushper td.st{font-weight:700}
+.pushbox .pushper tr.ok td.st{color:#1F6B47}
 @media (max-width:760px){.pushbox .pushgrid{grid-template-columns:repeat(2,1fr)}}
 .pushbox .pf{display:flex;flex-direction:column;gap:4px;font-size:11.5px;color:var(--ink2);min-width:0}
 .pushbox .pf span{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
@@ -1198,7 +1209,6 @@ table.cmp .worse{color:#AB2A20}
           </div>
           <div class="sub">挤头（管端打头）力 P = m·σs·D_m·l，l = Δ/tanα；力随单边减径 Δ 线性增长，Δ 加倍则力加倍。α 按<b>半角（单边）</b>填；挤头能力取「基础数据 → 机组能力」里的挤头能力列。</div>
           <div class="pushgrid">
-            <label class="pf pf-wide"><span>挤头设备（取「基础数据 → 机组能力」的挤头能力列）</span><select id="p-mach"></select></label>
             <label class="pf"><span>坯料外径 mm</span><input id="p-D" type="text" readonly value="—"></label>
             <label class="pf"><span>挤头后外径 mm</span><input id="p-d" type="number" step="0.1" min="0" value="" placeholder="自动"></label>
             <label class="pf"><span>模锥半角 α °</span><input id="p-angle" type="number" step="0.5" min="1" value=""></label>
@@ -1206,6 +1216,7 @@ table.cmp .worse{color:#AB2A20}
             <label class="pf"><span>挤头温度</span><select id="p-hot"><option value="0">冷挤</option><option value="1">热挤（σs×0.35）</option></select></label>
             <label class="pf"><span>安全系数</span><input id="p-sf" type="number" step="0.05" min="1" value=""></label>
             <label class="pf"><span>挤头段长度 mm</span><input id="p-len" type="number" step="10" min="1" value=""></label>
+            <label class="pf pf-wide"><span>机头 / 挤头设备（优先用机组自带的机头能力，选中挤头机才用该机数据）</span><select id="p-mach"></select></label>
           </div>
           <div class="pushout" id="push-out">—</div>
         </div>
@@ -4550,26 +4561,22 @@ function pushMachines() {
 
 function computePush(res) {
   var P = pushParam(), f = (res && res.f) || {};
-  var r0 = (res && res.rows && res.rows[0]) || null;
-  var dieV = (r0 && r0.die && r0.die.out && Number(r0.die.out.v) > 0) ? Number(r0.die.out.v) : 0;
-  var tgt = dieV || (r0 ? Number(r0.d) : 0);
   var pool = pushMachines();
   var own = (res && res.machine) || null;
+  /* 设备选择：机组自带机头能力优先（选了具体挤头机才用那台的） */
   var mach = null;
   if (P.mach) mach = pool.find(function (m) { return m.name === P.mach; }) || null;
   if (!mach) mach = (own && Number(own.pushKN) > 0) ? own : (pool[0] || null);
   var aIn = Math.max(Number(P.angle) || 15, 0.5);
   var o = {
     D: Math.max(Number(f.d0) || 0, 0),
-    auto: tgt > 0 ? Math.max(tgt - 1, 0) : 0,
-    isAuto: !(Number(P.d) > 0),
-    d: Number(P.d) > 0 ? Number(P.d) : (tgt > 0 ? Math.max(tgt - 1, 0) : 0),
     fullOn: !!Number(P.full),
     angIn: aIn,
     angle: Math.max(Number(P.full) ? aIn / 2 : aIn, 0.5),
     k: Math.max(Number(P.k) || 1.4, 0.05),
     hotOn: !!Number(P.hot),
     mach: mach ? mach.name : '',
+    machOwn: !!(own && mach && mach.name === own.name),
     machT: mach ? Math.round((Number(mach.pushKN) || Number(mach.kN)) / 9.80665) : 0,
     cap: Math.max(mach ? Number(mach.pushKN) : (Number(P.cap) || 600), 1),
     sf: Math.max(Number(P.sf) || 1.3, 1),
@@ -4579,18 +4586,65 @@ function computePush(res) {
   var rec = (DB.materials || []).find(function (m) { return m.code === o.mat; });
   o.ysNom = (rec && Number(rec.ys) > 0) ? Number(rec.ys) : 245;
   o.ys = o.hotOn ? o.ysNom * 0.35 : o.ysNom;
-  o.delta = (o.D > 0 && o.d > 0) ? (o.D - o.d) / 2 : 0;
-  o.lc = o.delta > 0 ? o.delta / Math.tan(o.angle * Math.PI / 180) : 0;
-  o.Dm = (o.D + o.d) / 2;
-  o.F = o.lc * o.Dm;
   o.p = o.k * o.ys;
-  o.P = o.p * o.F / 1000;
-  o.t = o.P / 9.80665;
-  o.util = o.P / o.cap * 100;
-  o.need = o.P * o.sf;
+
+  /* ---- 逐道次算：每一道拔前都要挤头，各自按「该道入口外径 → 该道外模−1」算 ---- */
+  var one = function (inD, endD) {
+    var r = { inD: inD, d: endD };
+    r.delta = (inD > 0 && endD > 0) ? (inD - endD) / 2 : 0;
+    r.lc = r.delta > 0 ? r.delta / Math.tan(o.angle * Math.PI / 180) : 0;
+    r.Dm = (inD + endD) / 2;
+    r.F = r.lc * r.Dm;
+    r.P = o.p * r.F / 1000;
+    r.t = r.P / 9.80665;
+    r.util = r.P / o.cap * 100;
+    r.need = r.P * o.sf;
+    r.needLen = r.lc + 20;
+    r.over = r.need > o.cap + 1e-6;
+    r.short = r.delta > 0 && o.lenIn < r.needLen;
+    return r;
+  };
+  var rows = [];
+  if (res && res.rows && res.rows.length) {
+    var prev = Number(f.d0) || 0;
+    res.rows.forEach(function (rr, i) {
+      var dieV = (rr.die && rr.die.out && Number(rr.die.out.v) > 0) ? Number(rr.die.out.v) : 0;
+      var endD = dieV ? Math.max(dieV - 1, 0) : Math.max(Number(rr.d) - 1, 0);
+      if (Number(P.d) > 0 && res.rows.length === 1) endD = Number(P.d);
+      var g = one(prev, endD);
+      g.i = i + 1;
+      g.dieEnd = endD;
+      rows.push(g);
+      prev = Number(rr.d) || prev;
+    });
+  } else {
+    var die0 = 0;
+    var tgt0 = die0 || (Number(f.d0) || 0);
+    var autoEnd = tgt0 > 0 ? Math.max(tgt0 - 1, 0) : 0;
+    var g0 = one(Number(f.d0) || 0, Number(P.d) > 0 ? Number(P.d) : autoEnd);
+    g0.i = 1; g0.dieEnd = Number(P.d) > 0 ? Number(P.d) : autoEnd;
+    rows.push(g0);
+  }
+  /* 面板大字取最狠的那一道 */
+  var worst = rows[0];
+  rows.forEach(function (r) { if (r.P > worst.P) worst = r; });
+  o.rows = rows;
+  o.rowWorst = worst.i;
+  o.auto = worst.dieEnd;
+  o.isAuto = !(Number(P.d) > 0);
+  o.d = worst.d;
+  o.delta = worst.delta;
+  o.lc = worst.lc;
+  o.Dm = worst.Dm;
+  o.F = worst.F;
+  o.P = worst.P;
+  o.t = worst.t;
+  o.util = worst.util;
+  o.need = worst.need;
   o.n = o.need > o.cap + 1e-6 ? Math.ceil(o.need / o.cap) : 1;
   o.dmax = o.n > 1 ? o.delta / o.n : o.delta;
-  o.needLen = o.lc + 20;
+  o.needLen = worst.needLen;
+  o.overRows = rows.filter(function (r) { return r.over; });
   o.st = 'ok';
   o.title = '挤头力在设备能力内';
   o.msg = '';
@@ -4598,16 +4652,17 @@ function computePush(res) {
     o.st = 'warn'; o.title = '待补坯料外径';
   } else if (!(o.delta > 0)) {
     o.st = 'bad'; o.title = '挤头后外径需小于坯料外径';
-  } else if (o.need > o.cap) {
-    o.st = 'bad'; o.title = '超挤头机吨位';
-    o.msg = '需 ' + f0(o.need) + ' kN（含安全系数 ' + f1(o.sf) + '），' + (o.mach ? o.mach + ' ' : '设备 ') + f0(o.cap) +
-      ' kN 不足 ' + f1(o.need / o.cap * 100 - 100) + '%。建议分 ' + o.n + ' 次挤，每次单边减径 ≤ ' + f2(o.dmax) +
-      ' mm；或端部加热改热挤（σs 折减后力约降 65%），也可在基础数据里换更大吨位挤头机。';
+  } else if (o.overRows.length) {
+    o.st = 'bad'; o.title = '超机头能力';
+    o.msg = '第 ' + o.overRows.map(function (r) { return r.i; }).join('、') + ' 道超：需 ' +
+      f0(Math.max.apply(null, o.overRows.map(function (r) { return r.need; }))) + ' kN（含安全系数 ' + f1(o.sf) + '），' +
+      (o.mach ? o.mach + ' ' : '设备 ') + f0(o.cap) + ' kN 不够。建议该道分 ' + o.n +
+      ' 次挤，每次单边减径 ≤ ' + f2(o.dmax) + ' mm；或端部加热改热挤，也可在基础数据里换更大吨位机头。';
   } else if (o.util >= 90) {
-    o.st = 'warn'; o.title = '接近挤头机能力上限';
-    o.msg = '利用率 ' + f1(o.util) + '%，建议留余量或分 2 次挤。';
+    o.st = 'warn'; o.title = '接近机头能力上限';
+    o.msg = '第 ' + worst.i + ' 道利用率 ' + f1(o.util) + '%，建议留余量或分 2 次挤。';
   } else {
-    o.msg = '利用率 ' + f1(o.util) + '%，留有余量。';
+    o.msg = '各道次均在能力内，最高第 ' + worst.i + ' 道利用率 ' + f1(o.util) + '%。';
   }
   if (o.delta > 0 && o.lenIn < o.needLen) {
     o.msg += (o.msg ? ' ' : '') + '挤头段长度 ' + f0(o.lenIn) + ' mm 小于变形区+导入段 ' +
@@ -4657,6 +4712,19 @@ function renderPush(res) {
   var angTxt = o.fullOn
     ? '全锥角 ' + f1(o.angIn) + '°（半角 ' + f1(o.angle) + '°）'
     : '半角 ' + f1(o.angIn) + '°（全锥角 ' + f1(o.angIn * 2) + '°）';
+  /* 多道次：每道拔前都要挤头，逐道判机头够不够 */
+  var perRows = '';
+  if (o.rows && o.rows.length > 1) {
+    perRows = '<div class="pushper"><div class="ph">各道次机头校核（每道拔前都要挤头，按该道入口外径 → 该道外模−1 算）</div>' +
+      '<div class="pt"><table><tr><th>道次</th><th>入口 Φ</th><th>挤头后 Φ</th><th>单边 Δ mm</th><th>挤头力 kN</th><th>折合 t</th><th>利用率</th><th>机头</th></tr>' +
+      o.rows.map(function (r) {
+        var cls = r.over ? 'bad' : (r.util >= 90 ? 'warn' : 'ok');
+        var txt = r.over ? '超' : (r.util >= 90 ? '临界' : '通过');
+        return '<tr class="' + cls + '"><td>' + r.i + '</td><td>' + f1(r.inD) + '</td><td>' + f1(r.d) + '</td>' +
+          '<td>' + f2(r.delta) + '</td><td>' + f0(r.P) + '</td><td>' + f1(r.t) + '</td><td>' + f0(r.util) + '%</td>' +
+          '<td class="st">' + txt + '</td></tr>';
+      }).join('') + '</table></div></div>';
+  }
   box.innerHTML =
     '<div class="po"><div class="k">单边减径 Δ</div><div class="v">' + f2(o.delta) + '<small>mm</small></div></div>' +
     '<div class="po"><div class="k">模锥角 ' + (o.fullOn ? '全锥角' : '半角') + '</div><div class="v">' + f1(o.angle) +
@@ -4671,7 +4739,8 @@ function renderPush(res) {
     '<div class="concl ' + o.st + '"><b>' + esc(o.title) + '</b>' + (o.msg ? '　' + esc(o.msg) : '') +
     '　<span style="color:#737C82">（' + esc(o.mat || '未选材质') + ' 屈服 ' + f0(o.ysNom) + ' MPa；' + angTxt +
     '；m=' + f2(o.k) + '；' + (o.mach ? esc(o.mach) + ' 挤头能力 ' + f0(o.cap) + ' kN' : '未填挤头能力，暂按 ' + f0(o.cap) + ' kN') +
-    '；安全系数 ' + f1(o.sf) + '；变形区+导入需 ≥ ' + f0(o.needLen) + ' mm）</span></div>';
+    '；安全系数 ' + f1(o.sf) + '；变形区+导入需 ≥ ' + f0(o.needLen) + ' mm）</span></div>' +
+    perRows;
 }
 
 function bindPush() {
