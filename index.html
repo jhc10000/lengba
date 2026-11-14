@@ -473,10 +473,13 @@ table.hours td .hcell:focus{outline:0;border-bottom-color:var(--steel);backgroun
   background:#fff;font-size:13px;text-align:right;font-family:"Bahnschrift",sans-serif;
 }
 .cellinput:focus{outline:2px solid var(--steel);outline-offset:-1px}
-/* 模具表里没有对应规格时的提示色 */
-.cellinput.idwarn{color:#AB2A20;border-color:#E0B4AE;background:#FDF6F5;font-weight:700}
-.idwarn-txt{color:#AB2A20;font-weight:700}
-.idnote{font-size:10.5px;color:#8F5B00;display:block;line-height:1.25;margin-top:1px}
+/* 模具表里没有对应规格时的提示色（橙色） */
+.cellinput.idwarn{color:#B36A00;border-color:#E2BF87;background:#FFF8EC;font-weight:700}
+.idwarn-txt{color:#B36A00;font-weight:700}
+.idnote{font-size:10px;color:#B36A00;display:block;line-height:1.1;margin-top:0}
+/* ID 列：输入框与左侧 D×S 输入框同一条水平线 */
+table.passes td.cid{vertical-align:top;padding-top:7px}
+table.passes td.cid .cellinput{display:block}
 .chk{display:inline-flex;align-items:center;gap:5px;font-size:11.5px;color:var(--ink2);min-height:32px;justify-content:flex-end}
 .chk input{width:16px;height:16px;accent-color:var(--steel)}
 
@@ -2784,15 +2787,15 @@ function renderTable(res) {
     var idCell;
     if (manual) {
       if (innDie) {
-        idCell = '<td><input class="cellinput" id="mID' + r.i + '" data-id="' + (r.i - 1) + '" type="number" step="0.5" min="0" value="' +
+        idCell = '<td class="cid"><input class="cellinput" id="mID' + r.i + '" data-id="' + (r.i - 1) + '" type="number" step="0.5" min="0" value="' +
           esc(idSpec) + '" title="模具表现成件 ' + esc(innDie.code) + '（实际尺寸 ' + f2(innDie.real != null ? innDie.real : innDie.v) + '）">';
       } else {
-        idCell = '<td><input class="cellinput idwarn" id="mID' + r.i + '" data-id="' + (r.i - 1) + '" type="number" step="0.5" min="0" value="' +
+        idCell = '<td class="cid"><input class="cellinput idwarn" id="mID' + r.i + '" data-id="' + (r.i - 1) + '" type="number" step="0.5" min="0" value="' +
           f2(idDia) + '" title="模具表里没有这个内径的模；填一个规格可按现成模反推壁厚"><span class="idnote">无模</span>';
       }
       idCell += '</td>';
     } else {
-      idCell = '<td><span class="num' + (innDie ? '' : ' idwarn-txt') + '">' + (idSpec || f2(idDia)) + '</span></td>';
+      idCell = '<td class="cid"><span class="num' + (innDie ? '' : ' idwarn-txt') + '">' + (idSpec || f2(idDia)) + '</span></td>';
     }
     rows.push('<tr' + trCls + '>' +
       '<td>' + r.i + '</td>' +
