@@ -517,6 +517,7 @@ table.passes td.cid .cellinput{display:block}
 /* 挤头力校核 */
 .pushbox .table-head .act{margin-left:auto;display:flex;gap:6px}
 .pushbox .pushgrid{display:grid;grid-template-columns:repeat(3,1fr);gap:10px 14px;margin:8px 0 0}
+.pushbox .pf-wide{grid-column:1 / -1}
 @media (max-width:760px){.pushbox .pushgrid{grid-template-columns:repeat(2,1fr)}}
 .pushbox .pf{display:flex;flex-direction:column;gap:4px;font-size:11.5px;color:var(--ink2);min-width:0}
 .pushbox .pf span{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
@@ -1197,6 +1198,7 @@ table.cmp .worse{color:#AB2A20}
           </div>
           <div class="sub">挤头（管端打头）力 P = m·σs·D_m·l，l = Δ/tanα；力随单边减径 Δ 线性增长，Δ 加倍则力加倍。α 按<b>半角（单边）</b>填；挤头能力取「基础数据 → 机组能力」里的挤头能力列。</div>
           <div class="pushgrid">
+            <label class="pf pf-wide"><span>挤头设备（取「基础数据 → 机组能力」的挤头能力列）</span><select id="p-mach"></select></label>
             <label class="pf"><span>坯料外径 mm</span><input id="p-D" type="text" readonly value="—"></label>
             <label class="pf"><span>挤头后外径 mm</span><input id="p-d" type="number" step="0.1" min="0" value="" placeholder="自动"></label>
             <label class="pf"><span>模锥半角 α °</span><input id="p-angle" type="number" step="0.5" min="1" value=""></label>
