@@ -519,9 +519,10 @@ table.passes td.cid .cellinput{display:block}
 .pushbox .pushgrid{display:grid;grid-template-columns:repeat(3,1fr);gap:10px 14px;margin:8px 0 0}
 .pushbox .pf-wide{grid-column:1 / -1}
 /* 各道次机头校核小表 */
-.pushbox .pushper{margin-top:10px;border-top:1px dashed var(--line);padding-top:8px}
+.pushbox .pushper{margin-top:10px;border-top:1px dashed var(--line);padding-top:8px;grid-column:1 / -1}
 .pushbox .pushper .ph{font-size:11.5px;color:var(--ink3);margin-bottom:5px;line-height:1.4}
 .pushbox .pushper table{width:100%;border-collapse:collapse;font-size:12px;font-variant-numeric:tabular-nums}
+.pushbox .pushper .pt{overflow-x:auto;-webkit-overflow-scrolling:touch}
 .pushbox .pushper th,.pushbox .pushper td{padding:4px 6px;border-bottom:1px solid var(--line);text-align:right;white-space:nowrap}
 .pushbox .pushper th{color:var(--ink3);font-weight:600;font-size:11px;background:#FAFAF7}
 .pushbox .pushper th:first-child,.pushbox .pushper td:first-child{text-align:left}
@@ -539,7 +540,9 @@ table.passes td.cid .cellinput{display:block}
 .pushbox .pf input[readonly]{background:transparent;border-color:transparent;color:var(--ink3);padding-left:0}
 .pushbox .pf input:focus,.pushbox .pf select:focus{outline:0;border-color:var(--steel)}
 .pushout{display:grid;grid-template-columns:repeat(4,1fr);gap:9px 14px;margin-top:12px;padding-top:10px;border-top:1px solid var(--line2)}
-@media (max-width:760px){.pushout{grid-template-columns:repeat(2,1fr)}}
+@media (max-width:760px){
+  .pushbox .pushgrid{grid-template-columns:repeat(2,1fr)}
+}
 .pushout .po{border-left:2px solid var(--line2);padding-left:8px;min-width:0}
 .pushout .po .k{font-size:11px;color:var(--ink3)}
 .pushout .po .v{font-size:13px;font-weight:700;color:var(--ink);font-variant-numeric:tabular-nums;white-space:nowrap}
@@ -550,6 +553,16 @@ table.passes td.cid .cellinput{display:block}
 .pushout .concl.bad b{color:var(--bad)}
 .pushout .concl.warn{border-left-color:var(--warn)}
 .pushout .concl.warn b{color:var(--warn)}
+/* 手机：指标改两列小卡片，值允许换行，不再挤成一团 */
+@media (max-width:760px){
+  .pushout{grid-template-columns:repeat(2,minmax(0,1fr));gap:7px 8px}
+  .pushout .po{border-left:none;padding:6px 8px;background:#FAFAF7;border:1px solid var(--line2);border-radius:6px;min-width:0}
+  .pushout .po .k{font-size:10.5px;line-height:1.3;white-space:normal;overflow:visible}
+  .pushout .po .v{font-size:12.5px;line-height:1.3;white-space:normal}
+  .pushout .po .v small{font-size:10px;margin-left:2px}
+  .pushout .concl{font-size:11.5px;line-height:1.55;padding:6px 0 0}
+  .pushbox .pushper th,.pushbox .pushper td{padding:4px 4px;font-size:11px}
+}
 
 /* 空态 */
 .empty{
@@ -1216,7 +1229,7 @@ table.cmp .worse{color:#AB2A20}
             <label class="pf"><span>挤头温度</span><select id="p-hot"><option value="0">冷挤</option><option value="1">热挤（σs×0.35）</option></select></label>
             <label class="pf"><span>安全系数</span><input id="p-sf" type="number" step="0.05" min="1" value=""></label>
             <label class="pf"><span>挤头段长度 mm</span><input id="p-len" type="number" step="10" min="1" value=""></label>
-            <label class="pf pf-wide"><span>机头 / 挤头设备（优先用机组自带的机头能力，选中挤头机才用该机数据）</span><select id="p-mach"></select></label>
+            <label class="pf"><span title="优先用机组自带的机头能力；选中具体挤头机才用该机数据">机头 / 挤头设备</span><select id="p-mach"></select></label>
           </div>
           <div class="pushout" id="push-out">—</div>
         </div>
@@ -4682,11 +4695,11 @@ function renderPush(res) {
     var ownM = (res && res.machine) || null;
     var ownK = (ownM && Number(ownM.pushKN) > 0) ? Number(ownM.pushKN) : 0;
     var selName = (P.mach && pool.some(function (m) { return m.name === P.mach; })) ? P.mach : '';
-    var list = '<option value=""' + (selName ? '' : ' selected') + '>跟随拔制机组' +
-      (ownM ? ' · ' + esc(ownM.name) + (ownK ? '（' + Math.round(ownK) + ' kN）' : '（该机组未填挤头能力）') : '') + '</option>' +
+    var list = '<option value=""' + (selName ? '' : ' selected') + '>跟随机组' +
+      (ownM ? ' · ' + esc(ownM.name) + (ownK ? ' ' + Math.round(ownK) + 'kN' : '（未填机头能力）') : '') + '</option>' +
       pool.map(function (m) {
         return '<option value="' + esc(m.name) + '"' + (m.name === selName ? ' selected' : '') + '>' +
-          esc(m.name) + ' · 挤头 ' + Math.round(m.pushKN) + ' kN / ' + Math.round(m.pushKN / 9.80665) + ' t</option>';
+          esc(m.name) + ' ' + Math.round(m.pushKN) + 'kN</option>';
       }).join('');
     sel.innerHTML = list;
   }
@@ -4716,12 +4729,12 @@ function renderPush(res) {
   var perRows = '';
   if (o.rows && o.rows.length > 1) {
     perRows = '<div class="pushper"><div class="ph">各道次机头校核（每道拔前都要挤头，按该道入口外径 → 该道外模−1 算）</div>' +
-      '<div class="pt"><table><tr><th>道次</th><th>入口 Φ</th><th>挤头后 Φ</th><th>单边 Δ mm</th><th>挤头力 kN</th><th>折合 t</th><th>利用率</th><th>机头</th></tr>' +
+      '<div class="pt"><table><tr><th>道次</th><th>入口→挤头 Φ</th><th>单边 Δ</th><th>挤头力 kN</th><th>利用率</th><th>机头</th></tr>' +
       o.rows.map(function (r) {
         var cls = r.over ? 'bad' : (r.util >= 90 ? 'warn' : 'ok');
         var txt = r.over ? '超' : (r.util >= 90 ? '临界' : '通过');
-        return '<tr class="' + cls + '"><td>' + r.i + '</td><td>' + f1(r.inD) + '</td><td>' + f1(r.d) + '</td>' +
-          '<td>' + f2(r.delta) + '</td><td>' + f0(r.P) + '</td><td>' + f1(r.t) + '</td><td>' + f0(r.util) + '%</td>' +
+        return '<tr class="' + cls + '"><td>' + r.i + '</td><td>' + f1(r.inD) + '→' + f1(r.d) + '</td>' +
+          '<td>' + f2(r.delta) + '</td><td>' + f0(r.P) + '</td><td>' + f0(r.util) + '%</td>' +
           '<td class="st">' + txt + '</td></tr>';
       }).join('') + '</table></div></div>';
   }
