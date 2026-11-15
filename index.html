@@ -938,6 +938,22 @@ table.cmp .worse{color:#AB2A20}
   background:rgba(20,24,28,.55);padding:16px;overflow:auto;
 }
 #batch-modal.on{display:block}
+#qload-modal{
+  position:fixed;inset:0;z-index:9997;display:none;
+  background:rgba(20,24,28,.55);padding:16px;overflow:auto;
+}
+#qload-modal.on{display:block}
+#qload-modal .cmp-card{
+  background:var(--paper);max-width:620px;margin:0 auto;border-radius:12px;
+  box-shadow:0 12px 40px rgba(0,0,0,.28);overflow:hidden;
+}
+#qload-modal .cmp-hd{
+  display:flex;align-items:center;gap:8px;padding:12px 16px;
+  border-bottom:1px solid var(--line);background:#fff;position:sticky;top:0;
+}
+#qload-modal .cmp-hd h3{margin:0;font-size:15px;flex:1}
+#qload-modal .cmp-body{padding:10px 16px 16px;max-height:58vh;overflow:auto}
+#qload-modal .save-search{margin-bottom:8px}
 #batch-modal .cmp-card{
   background:var(--paper);max-width:660px;margin:0 auto;border-radius:12px;
   box-shadow:0 12px 40px rgba(0,0,0,.28);overflow:hidden;
@@ -1248,17 +1264,16 @@ table.cmp .worse{color:#AB2A20}
           <div class="txt"><b id="vd-title">—</b><p id="vd-text"></p></div>
         </div>
 
-        <!-- 方案库快捷区：算完直接存、直接搜，不用切到基础数据 -->
+        <!-- 方案库快捷区：算完直接存、直接载入，不用切到基础数据 -->
         <div class="table-box qsave">
           <div class="table-head">
             <h3>方案库</h3>
             <span class="sub" id="qsave-count">—</span>
-            <div class="act"><button type="button" class="mini pri" id="qs-save">保存当前方案</button></div>
+            <div class="act">
+              <button type="button" class="mini" id="qs-load">载入方案…</button>
+              <button type="button" class="mini pri" id="qs-save">保存当前方案</button>
+            </div>
           </div>
-          <div class="qsave-tools">
-            <input type="search" id="qs-search" class="save-search" placeholder="搜索方案名、任务单号、材质…" autocomplete="off">
-          </div>
-          <div class="qsave-list" id="qs-list"></div>
         </div>
 
       </div>
@@ -1685,6 +1700,20 @@ table.cmp .worse{color:#AB2A20}
   </div>
 </div>
 <div id="batchsheet"></div>
+
+<!-- 载入方案弹层（计算页「载入方案…」按钮打开） -->
+<div id="qload-modal" role="dialog" aria-modal="true" aria-label="载入方案">
+  <div class="cmp-card">
+    <div class="cmp-hd">
+      <h3>载入方案</h3>
+      <button type="button" class="mini" id="qload-close">关闭</button>
+    </div>
+    <div class="cmp-body">
+      <input type="search" id="qload-search" class="save-search" placeholder="搜索方案名、任务单号、材质…" autocomplete="off">
+      <div id="qload-list"></div>
+    </div>
+  </div>
+</div>
 
 <script>
 (function () {
@@ -3595,7 +3624,7 @@ function renderSaves() {
     $('qsave-count').textContent = DB.saves.length ? '共 ' + DB.saves.length + ' 个方案' : '还没有方案';
   }
   renderSavesInto($('savelist'), $('save-search') ? $('save-search').value : '', false);
-  renderSavesInto($('qs-list'), $('qs-search') ? $('qs-search').value : '', true);
+  renderSavesInto($('qload-list'), $('qload-search') ? $('qload-search').value : '', true);
 }
 
 /* ============================ 拔制力算法面板 ============================ */
@@ -5462,10 +5491,18 @@ function bindEvents() {
   $('btn-save').addEventListener('click', saveCurrentPlan);
   /* 计算页的快捷保存 + 搜索 */
   if ($('qs-save')) $('qs-save').addEventListener('click', saveCurrentPlan);
-  if ($('qs-search')) {
-    $('qs-search').addEventListener('input', renderSaves);
-    $('qs-search').addEventListener('focus', renderSaves);
-  }
+  if ($('qs-load')) $('qs-load').addEventListener('click', function () {
+    if (!DB.saves.length) { toast('方案库还是空的，先保存一个'); return; }
+    if ($('qload-search')) $('qload-search').value = '';
+    renderSaves();
+    $('qload-modal').classList.add('on');
+    if ($('qload-search')) setTimeout(function () { $('qload-search').focus(); }, 60);
+  });
+  if ($('qload-close')) $('qload-close').addEventListener('click', function () { $('qload-modal').classList.remove('on'); });
+  if ($('qload-modal')) $('qload-modal').addEventListener('click', function (ev) {
+    if (ev.target === $('qload-modal')) $('qload-modal').classList.remove('on');
+  });
+  if ($('qload-search')) $('qload-search').addEventListener('input', renderSaves);
   /* 计算页「载入」按钮（基础数据页的载入由 #view-data 的委托处理） */
   document.addEventListener('click', function (ev) {
     var t = ev.target;
@@ -5473,7 +5510,9 @@ function bindEvents() {
     var btn = t.closest('[data-load]');
     if (!btn || btn.closest('#view-data')) return;
     ev.preventDefault();
+    var inModal = !!btn.closest('#qload-modal');
     loadSave(+btn.getAttribute('data-load'));
+    if (inModal) $('qload-modal').classList.remove('on');
   });
 
   /* 数据导入导出 */
