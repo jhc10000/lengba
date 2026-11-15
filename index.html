@@ -838,6 +838,12 @@ table.mt input.mtin.l{text-align:left;font-family:inherit}
   -webkit-appearance:none;appearance:none;
 }
 .save-search:focus{outline:2px solid var(--steel);outline-offset:-1px;border-color:var(--steel)}
+/* 计算页的方案库快捷区 */
+.qsave .qsave-tools{margin:6px 0 4px}
+.qsave .qsave-list{max-height:250px;overflow:auto;border-top:1px solid var(--line2);padding-top:4px}
+.qsave .qsave-list .saveitem{padding:5px 2px}
+.qsave .qsave-list .saveitem .nm{font-size:12.5px}
+.qsave .qsave-list .save-empty{padding:14px 4px}
 /* 搜索框 + 整理名称按钮同一行 */
 .save-tools{display:flex;align-items:center;gap:7px;margin-bottom:8px}
 .save-tools .save-search{margin-bottom:0;flex:1;min-width:0}
@@ -1240,6 +1246,19 @@ table.cmp .worse{color:#AB2A20}
             <path d="M7 12.4l3.4 3.4L17 9.4" fill="none" stroke="#1F6B47" stroke-width="1.8"/>
           </svg>
           <div class="txt"><b id="vd-title">—</b><p id="vd-text"></p></div>
+        </div>
+
+        <!-- 方案库快捷区：算完直接存、直接搜，不用切到基础数据 -->
+        <div class="table-box qsave">
+          <div class="table-head">
+            <h3>方案库</h3>
+            <span class="sub" id="qsave-count">—</span>
+            <div class="act"><button type="button" class="mini pri" id="qs-save">保存当前方案</button></div>
+          </div>
+          <div class="qsave-tools">
+            <input type="search" id="qs-search" class="save-search" placeholder="搜索方案名、任务单号、材质…" autocomplete="off">
+          </div>
+          <div class="qsave-list" id="qs-list"></div>
         </div>
 
       </div>
@@ -3492,18 +3511,29 @@ function tidyNames() {
   toast('已整理 ' + changed + ' 个方案名');
 }
 
-function renderSaves() {
-  var sl = $('savelist');
-  if (!sl) return;
-  var qEl = $('save-search');
-  var q = (qEl && qEl.value ? qEl.value : '').trim().toLowerCase();
-
-  if ($('save-count')) {
-    $('save-count').textContent = DB.saves.length ? '共 ' + DB.saves.length + ' 个方案' : '保存在本机浏览器';
+/* 保存当前方案（基础数据页、计算页共用） */
+function saveCurrentPlan() {
+  var f = readForm();
+  var name = ((f.name || '未命名产品') + (saveSpec(f) ? ' ' + saveSpec(f) : '')).trim();
+  var snap = { form: f, card: readCard(), mode: S.mode, passes: S.passes, proc: DB.proc };
+  var exist = DB.saves.findIndex(function (s) { return s.name === name; });
+  if (exist >= 0) {
+    if (!confirm('已存在同名方案，覆盖？')) return;
+    DB.saves[exist] = { name: name, at: Date.now(), snap: snap };
+  } else {
+    DB.saves.unshift({ name: name, at: Date.now(), snap: snap });
   }
+  if (DB.saves.length > 60) DB.saves.length = 60;
+  persist(); renderData();
+  toast(exist >= 0 ? '已覆盖保存：' + name : '已保存到方案库');
+}
+
+function renderSavesInto(el, q, compact) {
+  if (!el) return;
+  q = (q || '').trim().toLowerCase();
 
   if (!DB.saves.length) {
-    sl.innerHTML = '<div class="save-empty">还没有保存的方案。填好参数后点右上角「保存当前方案」。</div>';
+    el.innerHTML = '<div class="save-empty">还没有保存的方案。填好参数后点「保存当前方案」。</div>';
     return;
   }
 
@@ -3516,7 +3546,7 @@ function renderSaves() {
     });
   }
   if (!rows.length) {
-    sl.innerHTML = '<div class="save-empty">没有匹配「' + esc(q) + '」的方案</div>';
+    el.innerHTML = '<div class="save-empty">没有匹配「' + esc(q) + '」的方案</div>';
     return;
   }
 
@@ -3534,19 +3564,38 @@ function renderSaves() {
       html.push('<div class="save-day"><span>' + dayLabel(day) + '</span><i>' + counts[day] + ' 个</i></div>');
       lastDay = day;
     }
-    var f = (r.s.snap && r.s.snap.form) || {};
     var label = saveLabel(r.s);
-    var on = S.cmpSel.indexOf(r.i) >= 0;
-    html.push('<div class="saveitem' + (on ? ' on' : '') + '">' +
-      '<input type="checkbox" class="cmpck" data-cmp="' + r.i + '"' + (on ? ' checked' : '') + ' title="勾选两个可对比">' +
-      '<div class="si-main"><span class="nm" title="' + esc(label) + '">' + esc(label) + '</span></div>' +
-      '<span class="dm">' + hhmm + '</span>' +
-      '<button class="mini" data-load="' + r.i + '">载入</button>' +
-      '<button class="mini" data-rename="' + r.i + '">改名</button>' +
-      '<button class="mini del" data-delsave="' + r.i + '" title="删除">×</button>' +
-      '</div>');
+    if (compact) {
+      /* 计算页：只留「载入」，一行放得下 */
+      html.push('<div class="saveitem">' +
+        '<div class="si-main"><span class="nm" title="' + esc(label) + '">' + esc(label) + '</span></div>' +
+        '<span class="dm">' + hhmm + '</span>' +
+        '<button class="mini" data-load="' + r.i + '">载入</button>' +
+        '</div>');
+    } else {
+      var on = S.cmpSel.indexOf(r.i) >= 0;
+      html.push('<div class="saveitem' + (on ? ' on' : '') + '">' +
+        '<input type="checkbox" class="cmpck" data-cmp="' + r.i + '"' + (on ? ' checked' : '') + ' title="勾选两个可对比">' +
+        '<div class="si-main"><span class="nm" title="' + esc(label) + '">' + esc(label) + '</span></div>' +
+        '<span class="dm">' + hhmm + '</span>' +
+        '<button class="mini" data-load="' + r.i + '">载入</button>' +
+        '<button class="mini" data-rename="' + r.i + '">改名</button>' +
+        '<button class="mini del" data-delsave="' + r.i + '" title="删除">×</button>' +
+        '</div>');
+    }
   });
-  sl.innerHTML = html.join('');
+  el.innerHTML = html.join('');
+}
+
+function renderSaves() {
+  if ($('save-count')) {
+    $('save-count').textContent = DB.saves.length ? '共 ' + DB.saves.length + ' 个方案' : '保存在本机浏览器';
+  }
+  if ($('qsave-count')) {
+    $('qsave-count').textContent = DB.saves.length ? '共 ' + DB.saves.length + ' 个方案' : '还没有方案';
+  }
+  renderSavesInto($('savelist'), $('save-search') ? $('save-search').value : '', false);
+  renderSavesInto($('qs-list'), $('qs-search') ? $('qs-search').value : '', true);
 }
 
 /* ============================ 拔制力算法面板 ============================ */
@@ -5410,20 +5459,21 @@ function bindEvents() {
   });
 
   /* 方案库 */
-  $('btn-save').addEventListener('click', function () {
-    var f = readForm();
-    var name = ((f.name || '未命名产品') + (saveSpec(f) ? ' ' + saveSpec(f) : '')).trim();
-    var snap = { form: f, card: readCard(), mode: S.mode, passes: S.passes, proc: DB.proc };
-    var exist = DB.saves.findIndex(function (s) { return s.name === name; });
-    if (exist >= 0) {
-      if (!confirm('已存在同名方案，覆盖？')) return;
-      DB.saves[exist] = { name: name, at: Date.now(), snap: snap };
-    } else {
-      DB.saves.unshift({ name: name, at: Date.now(), snap: snap });
-    }
-    if (DB.saves.length > 60) DB.saves.length = 60;
-    persist(); renderData();
-    toast('已保存到本机');
+  $('btn-save').addEventListener('click', saveCurrentPlan);
+  /* 计算页的快捷保存 + 搜索 */
+  if ($('qs-save')) $('qs-save').addEventListener('click', saveCurrentPlan);
+  if ($('qs-search')) {
+    $('qs-search').addEventListener('input', renderSaves);
+    $('qs-search').addEventListener('focus', renderSaves);
+  }
+  /* 计算页「载入」按钮（基础数据页的载入由 #view-data 的委托处理） */
+  document.addEventListener('click', function (ev) {
+    var t = ev.target;
+    if (!t || !t.closest) return;
+    var btn = t.closest('[data-load]');
+    if (!btn || btn.closest('#view-data')) return;
+    ev.preventDefault();
+    loadSave(+btn.getAttribute('data-load'));
   });
 
   /* 数据导入导出 */
@@ -5771,6 +5821,7 @@ function loadSave(i) {
   if (!s) return;
   applySaveSnap(s.snap);
   switchView('calc');
+  toast('已载入：' + saveLabel(s));
 }
 
 /* 把一份方案快照灌进界面（不改视图，供载入/对比/批量打印复用） */
