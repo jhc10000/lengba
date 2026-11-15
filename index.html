@@ -1367,7 +1367,7 @@ table.cmp .worse{color:#AB2A20}
           <option value="90">90% · 仍两页再用</option>
         </select></div></div>
         <div class="row"><label for="c-route">工艺路线</label><div class="field"><select id="c-route"></select></div></div>
-        <div class="row"><label for="c-angle">模具锥角</label><div class="field hasunit"><input id="c-angle" type="number" step="1" min="4" max="30" value="12"><span class="unit">°</span></div></div>
+        <div class="row"><label for="c-angle" title="自动取挤头力校核里的模锥半角 ×2">模具锥角</label><div class="field hasunit"><input id="c-angle" type="number" step="0.5" readonly title="自动 = 挤头力校核的模锥半角 α × 2"><span class="unit">°</span></div></div>
         <div class="row full"><div class="field"><input id="c-lube" type="text" value="皂化液 + 磷化" placeholder="润滑方式" aria-label="润滑方式"></div></div>
         <div class="row"><label for="c-by">编制</label><div class="field"><input id="c-by" type="text" placeholder="姓名" value=""></div></div>
         <div class="row"><label for="c-check">校核</label><div class="field"><input id="c-check" type="text" placeholder="姓名" value=""></div></div>
@@ -3141,7 +3141,9 @@ function renderSheet(res) {
   h.push('<table class="sheet-t"><colgroup><col style="width:13%"><col style="width:37%"><col style="width:13%"><col style="width:37%"></colgroup>');
   h.push('<tr><td class="lbl">润滑</td><td>' + esc(card.lube || '—') + '</td><td class="lbl">中间退火</td><td>' +
     (annealPasses.length ? esc(annealPasses.join('、')) : '不安排') + '</td></tr>');
-  h.push('<tr><td class="lbl">酸洗/皂化</td><td colspan="3">按常规工艺</td></tr>');
+  var cone = coneDeg();
+  h.push('<tr><td class="lbl">酸洗/皂化</td><td>按常规工艺</td><td class="lbl">模具锥角</td><td>全锥角 ' +
+    f1(cone.full) + '°（半角 ' + f1(cone.half) + '°）</td></tr>');
   h.push('</table></div>');
 
   /* 三、其他要求：定尺 / 倍数 / 坯管长（多组）+ 车头尺寸 */
@@ -3245,7 +3247,8 @@ function renderSheet2(res, card) {
 
   h.push('<table class="sheet-t" style="margin-bottom:6px"><tr>' +
     '<td class="lbl" style="width:12%">规格型号</td>' +
-    '<td class="full" style="padding-left:8px;font-size:9pt">' + esc(mat.code) + '　Φ' + f1(nom.d1) + '/Φ' + f1(nom.id1) + '×' + f2(nom.s1) + '</td></tr></table>');
+    '<td class="full" style="padding-left:8px;font-size:9pt">' + esc(mat.code) + '　Φ' + f1(nom.d1) + '/Φ' + f1(nom.id1) + '×' + f2(nom.s1) +
+    '　模具锥角 ' + f1(coneDeg().full) + '°</td></tr></table>');
 
   /* 工序表：10 列，与车间工序卡一致；表上方只有「规格型号」一行 */
   h.push('<div class="sec fill" style="margin-top:2px">');
@@ -3574,18 +3577,17 @@ function renderForce() {
 /* ============================ 模具清单 ============================ */
 var MOULD_GROUPS = [
   { key: 'wm', name: '冷拔外模', desc: '拉拔外模：实际尺寸 + 喇叭口',
-    cols: [['code', '代码', 'l', '21%'], ['spec', '规格', 'n', '8%'], ['vendor', '厂家', 'l', '10%'], ['mat', '材质', 'l', '12%'],
-      ['s1', '实际尺寸', 'n', '10%'], ['s2', '喇叭口', 'n', '10%'], ['date', '收货日期', 'n', '13%'], ['note', '备注', 'l', '16%']] },
+    cols: [['code', '代码', 'l', '24%'], ['spec', '规格', 'n', '9%'], ['vendor', '厂家', 'l', '12%'], ['mat', '材质', 'l', '14%'],
+      ['s1', '实际尺寸', 'n', '20%'], ['s2', '喇叭口', 'n', '21%']] },
   { key: 'nm', name: '冷拔内模', desc: '含双定径带内模：模具尺寸 / 实际尺寸 / 内孔',
-    cols: [['code', '代码', 'l', '23%'], ['spec', '规格', 'n', '7%'], ['vendor', '厂家', 'l', '9%'],
-      ['mat', '材质', 'l', '13%'], ['s1', '模具尺寸', 'n', '9%'], ['s2', '实际尺寸', 'n', '9%'], ['s3', '内孔', 'n', '9%'],
-      ['date', '收货日期', 'n', '11%'], ['note', '备注', 'l', '6%']] },
+    cols: [['code', '代码', 'l', '24%'], ['spec', '规格', 'n', '8%'], ['vendor', '厂家', 'l', '10%'],
+      ['mat', '材质', 'l', '14%'], ['s1', '模具尺寸', 'n', '14%'], ['s2', '实际尺寸', 'n', '15%'], ['s3', '内孔', 'n', '15%']] },
   { key: 'roll', name: '冷轧轧辊', desc: '轧机轧辊：模具尺寸 + 喇叭口尺寸',
-    cols: [['code', '代码', 'l', '21%'], ['spec', '规格', 'n', '8%'], ['vendor', '厂家', 'l', '10%'], ['mat', '材质', 'l', '12%'],
-      ['s1', '模具尺寸', 'n', '10%'], ['s2', '喇叭口', 'n', '10%'], ['date', '收货日期', 'n', '13%'], ['note', '备注', 'l', '16%']] },
+    cols: [['code', '代码', 'l', '24%'], ['spec', '规格', 'n', '9%'], ['vendor', '厂家', 'l', '12%'], ['mat', '材质', 'l', '14%'],
+      ['s1', '模具尺寸', 'n', '20%'], ['s2', '喇叭口', 'n', '21%']] },
   { key: 'mand', name: '冷轧芯棒', desc: '轧机芯棒：模具尺寸 + 尾部尺寸',
-    cols: [['code', '代码', 'l', '21%'], ['spec', '规格', 'n', '8%'], ['vendor', '厂家', 'l', '10%'], ['mat', '材质', 'l', '12%'],
-      ['s1', '模具尺寸', 'n', '10%'], ['s2', '尾部', 'n', '10%'], ['date', '收货日期', 'n', '13%'], ['note', '备注', 'l', '16%']] }
+    cols: [['code', '代码', 'l', '24%'], ['spec', '规格', 'n', '9%'], ['vendor', '厂家', 'l', '12%'], ['mat', '材质', 'l', '14%'],
+      ['s1', '模具尺寸', 'n', '20%'], ['s2', '尾部', 'n', '21%']] }
 ];
 
 function mouldGroup(key) {
@@ -3606,7 +3608,7 @@ function buildMouldBoxes() {
       '<button type="button" class="mini pri madd" data-g="' + g.key + '">＋ 新增</button></div></div>' +
       '<div class="dbox-body"><div class="mwrap"><table class="mt"><colgroup>' +
       g.cols.map(function (c) { return '<col style="width:' + cw(c[3]) + '">'; }).join('') +
-      '<col style="width:7%"></colgroup><thead><tr>' +
+      '<col style="width:78px"></colgroup><thead><tr>' +
       g.cols.map(function (c) { return '<th class="' + (c[2] === 'l' ? 'l' : '') + '">' + c[1] + '</th>'; }).join('') +
       '<th></th></tr></thead><tbody id="mbody-' + g.key + '"></tbody></table></div></div></div>';
   };
@@ -4559,6 +4561,13 @@ function bindLabor() {
 }
 
 /* ============================ 挤头力校核 ============================ */
+/* 模具锥角（全锥角）= 挤头力校核里的模锥半角 α × 2；工艺卡统一取这个值 */
+function coneDeg() {
+  var P = pushParam();
+  var aIn = Math.max(Number(P.angle) || 7, 0.5);
+  var half = Number(P.full) ? aIn / 2 : aIn;
+  return { half: half, full: half * 2 };
+}
 function pushParam() {
   if (!DB.push || typeof DB.push !== 'object') DB.push = clone(DEFAULT_DB.push);
   /* 「角度标注方式」已从界面去掉，统一按半角（单边）算，避免老数据带 full=1 导致口径不一致 */
@@ -4716,6 +4725,10 @@ function renderPush(res) {
   if ($('p-hot')) $('p-hot').value = String(P.hot ? 1 : 0);
   if ($('p-angle-lbl')) $('p-angle-lbl').textContent = P.full ? '全锥角 β °' : '模锥半角 α °';
   if ($('p-D')) $('p-D').value = o.D > 0 ? 'Φ' + f1(o.D) : '—';
+  /* 工艺卡的「模具锥角」跟着模锥半角走：全锥角 = 半角 × 2 */
+  var cd = coneDeg();
+  if ($('c-angle') && $('c-angle').value !== String(f1(cd.full))) $('c-angle').value = f1(cd.full);
+  DB.card.angle = cd.full;
   var tag = $('push-tag');
   if (tag) {
     tag.className = 'badge-s ' + (o.st === 'bad' ? 'bad' : (o.st === 'warn' ? 'warn' : 'ok'));
