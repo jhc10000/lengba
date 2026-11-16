@@ -3367,13 +3367,14 @@ function renderSheet2(res, card) {
     var specIn = r && r.die && r.die.inn ? String(r.die.inn.spec != null && r.die.inn.spec !== '' ? r.die.inn.spec : r.die.inn.v) : '';
     /* 芯杆 / 钳口（冷轧为 顶杆 / 齿数）：优先取基础数据的工装明细，查不到才回退老的自动值 */
     var coreV, jawV;
-    /* 芯杆/顶杆按该道内模（冷轧芯棒）规格查；钳口按该道外模（轧辊）规格查 */
-    var idFallback = f2(oD - 2 * oS);
+    /* 芯杆/顶杆按该道内模（冷轧芯棒）规格查；钳口按该道外模（轧辊）规格查。
+       无模（该道没匹配到模具）时，按填入/算出的内径、外径去表里匹配，仍查不到才显示原值 */
+    var idNum = oD - 2 * oS, idFallback = f2(idNum);
     if (isRollMode) {
-      coreV = findPushRod(specIn) || idFallback;
+      coreV = findPushRod(specIn || idNum) || idFallback;
       jawV = gearCount(oD);
     } else {
-      coreV = findRod(specIn) || idFallback;
+      coreV = findRod(specIn || idNum) || idFallback;
       jawV = findJaw(m ? m.name : '', specOut || oD) || f2(oD);
     }
     h.push('<tr>' +
