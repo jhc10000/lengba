@@ -1627,6 +1627,9 @@ table.cmp .worse{color:#AB2A20}
         </div>
       </div>
 
+      <!-- 芯杆 / 钳口 / 顶杆明细（工艺卡模板二取这里） -->
+      <div id="toolboxes"></div>
+
       <div class="dbox">
         <div class="dbox-hd">
           <h3>数据管理</h3>
@@ -3332,6 +3335,15 @@ function renderSheet2(res, card) {
     /* 外模 / 内模（冷轧为 轧辊 / 芯棒）按模具库「规格」列显示 */
     var specOut = r && r.die && r.die.out ? String(r.die.out.spec != null && r.die.out.spec !== '' ? r.die.out.spec : r.die.out.v) : '';
     var specIn = r && r.die && r.die.inn ? String(r.die.inn.spec != null && r.die.inn.spec !== '' ? r.die.inn.spec : r.die.inn.v) : '';
+    /* 芯杆 / 钳口（冷轧为 顶杆 / 齿数）：优先取基础数据的工装明细，查不到才回退老的自动值 */
+    var coreV, jawV;
+    if (isRollMode) {
+      coreV = findPushRod(specIn) || f2(oD - 2 * oS);
+      jawV = gearCount(oD);
+    } else {
+      coreV = findRod(specIn) || f2(oD - 2 * oS);
+      jawV = findJaw(m ? m.name : '', f.d0 || oD) || f2(oD);
+    }
     h.push('<tr>' +
       '<td>' + no + '</td>' +
       '<td>' + esc(s.st) + '</td>' +
@@ -3341,8 +3353,8 @@ function renderSheet2(res, card) {
       '<td>' + (isDraw && r ? f2(r.mu) : '') + '</td>' +
       '<td>' + (isDraw ? esc(specOut) : '') + '</td>' +
       '<td>' + (isDraw ? esc(specIn) : '') + '</td>' +
-      '<td>' + (isDraw ? f2(oD - 2 * oS) : '') + '</td>' +
-      '<td>' + (isDraw && !isRollMode ? f2(oD) : '') + '</td></tr>');
+      '<td>' + (isDraw ? esc(coreV) : '') + '</td>' +
+      '<td>' + (isDraw ? esc(jawV) : '') + '</td></tr>');
     no += 10;
   });
   var pad = 12 - steps.length;
@@ -3722,7 +3734,102 @@ var MOULD_GROUPS = [
 function mouldGroup(key) {
   var g = null;
   MOULD_GROUPS.forEach(function (x) { if (x.key === key) g = x; });
+  if (!g) TOOL_GROUPS.forEach(function (x) { if (x.key === key) g = x; });
   return g;
+}
+
+/* ===== 芯杆 / 钳口 / 顶杆明细（基础数据页面，工艺卡模板二取这里） ===== */
+var TOOL_GROUPS = [
+  { key: 'rod', name: '芯杆（冷拔）', desc: '按「内模规格」查芯杆；模板二冷拔「芯杆」列取这里的芯杆规格',
+    cols: [['spec', '内模规格', 'n', '26%'], ['s1', '芯杆规格', 'n', '26%'], ['s2', '长度 mm', 'n', '20%'], ['note', '备注', 'l', '28%']] },
+  { key: 'jaw', name: '钳口', desc: '按「机组 + 坯料外径」查钳口；选 LB-800T 时取 800T 那组钳口',
+    cols: [['spec', '机组', 'l', '28%'], ['s1', '坯料外径', 'n', '22%'], ['s2', '钳口规格', 'l', '22%'], ['note', '备注', 'l', '28%']] },
+  { key: 'pushrod', name: '顶杆（冷轧）', desc: '按「芯棒规格」查顶杆；模板二冷轧「顶杆」列取这里的顶杆规格',
+    cols: [['spec', '芯棒规格', 'n', '26%'], ['s1', '顶杆规格', 'n', '26%'], ['s2', '长度 mm', 'n', '20%'], ['note', '备注', 'l', '28%']] }
+];
+
+function ensureToolGroups() {
+  if (!DB.moulds) DB.moulds = {};
+  TOOL_GROUPS.forEach(function (g) { if (!Array.isArray(DB.moulds[g.key])) DB.moulds[g.key] = []; });
+}
+
+/* ---------- 工装明细查询（工艺卡模板二用） ---------- */
+function toolRows(key) { return (DB.moulds && DB.moulds[key]) || []; }
+
+/* 芯杆：按内模规格查，返回芯杆规格；查不到返回 '' */
+function findRod(specIn) {
+  var sp0 = parseFloat(specIn);
+  if (!isFinite(sp0)) return '';
+  var hit = '';
+  toolRows('rod').forEach(function (r) {
+    var sp = parseFloat(r.spec);
+    if (isFinite(sp) && Math.abs(sp - sp0) <= 0.02 && String(r.s1 || '').trim()) hit = String(r.s1).trim();
+  });
+  return hit;
+}
+
+/* 顶杆：按芯棒规格查 */
+function findPushRod(specMand) {
+  var sp0 = parseFloat(specMand);
+  if (!isFinite(sp0)) return '';
+  var hit = '';
+  toolRows('pushrod').forEach(function (r) {
+    var sp = parseFloat(r.spec);
+    if (isFinite(sp) && Math.abs(sp - sp0) <= 0.02 && String(r.s1 || '').trim()) hit = String(r.s1).trim();
+  });
+  return hit;
+}
+
+/* 机组吨位：LB-800T → 800T；查不到返回 '' */
+function tonOf(name) {
+  var m = String(name || '').match(/(\d{2,4})\s*T/i);
+  return m ? (m[1] + 'T') : '';
+}
+
+/* 钳口：按「机组 + 坯料外径」查，机组对上后才比外径（±2mm），返回钳口规格 */
+function findJaw(machName, od) {
+  var mt = tonOf(machName), mn = String(machName || '').trim().toLowerCase();
+  var od0 = parseFloat(od);
+  var best = 1e9, hit = '';
+  toolRows('jaw').forEach(function (r) {
+    var rs = String(r.spec || '').trim();
+    if (rs) {
+      var ok = rs.toLowerCase() === mn || (mt && tonOf(rs) === mt);
+      if (!ok) return;
+    }
+    var sp = parseFloat(r.s1);
+    if (!isFinite(sp) || !String(r.s2 || '').trim()) return;
+    var d = Math.abs(sp - od0);
+    if (isFinite(od0) && d <= 2.0 && d < best) { best = d; hit = String(r.s2).trim(); }
+  });
+  return hit;
+}
+
+/* 冷轧齿数 = floor((450 − 外径 + 外径×0.2) ÷ 14 + 1) */
+function gearCount(od) {
+  var d = parseFloat(od);
+  if (!isFinite(d) || d <= 0) return '';
+  return String(Math.floor((450 - d + d * 0.2) / 14 + 1));
+}
+
+function buildToolBoxes() {
+  if (!$('toolboxes')) return;
+  ensureToolGroups();
+  var cw = function (p) { return (Math.round(parseFloat(p) * 0.93 * 10) / 10) + '%'; };
+  $('toolboxes').innerHTML = TOOL_GROUPS.map(function (g) {
+    return '<div class="dbox" data-g="' + g.key + '">' +
+      '<div class="dbox-hd"><h3>' + g.name + '</h3><span class="sub">' + g.desc + '</span>' +
+      '<span class="sub" id="mcount-' + g.key + '">—</span>' +
+      '<div class="act">' +
+      '<input class="filter mfilter" id="mfilter-' + g.key + '" data-g="' + g.key + '" type="search" placeholder="筛选" aria-label="筛选' + g.name + '">' +
+      '<button type="button" class="mini pri madd" data-g="' + g.key + '">＋ 新增</button></div></div>' +
+      '<div class="dbox-body"><div class="mwrap"><table class="mt"><colgroup>' +
+      g.cols.map(function (c) { return '<col style="width:' + cw(c[3]) + '">'; }).join('') +
+      '<col style="width:78px"></colgroup><thead><tr>' +
+      g.cols.map(function (c) { return '<th class="' + (c[2] === 'l' ? 'l' : '') + '">' + c[1] + '</th>'; }).join('') +
+      '<th></th></tr></thead><tbody id="mbody-' + g.key + '"></tbody></table></div></div></div>';
+  }).join('');
+  TOOL_GROUPS.forEach(function (g) { renderMouldGroup(g); });
 }
 
 function buildMouldBoxes() {
@@ -3789,7 +3896,7 @@ function renderMouldGroup(g) {
     }
   });
   if (!list.length) {
-    html.push('<tr><td class="mempty" colspan="' + (g.cols.length + 1) + '">没有匹配的模具</td></tr>');
+    html.push('<tr><td class="mempty" colspan="' + (g.cols.length + 1) + '">' + (q ? '没有匹配的记录' : '还没有数据，点右上「＋ 新增」添加') + '</td></tr>');
   }
   $('mbody-' + g.key).innerHTML = html.join('');
   var cnt = $('mcount-' + g.key);
@@ -5328,6 +5435,32 @@ function bindEvents() {
     S.mq[key] = inp.value;
     renderMouldGroup(mouldGroup(key));
   });
+  /* 芯杆 / 钳口 / 顶杆明细（基础数据页）——共用模具清单那一套增删改 */
+  var toolClick = function (e) {
+    var btn = e.target.closest ? e.target.closest('button') : null;
+    if (!btn) return;
+    var key = btn.getAttribute('data-g');
+    var g = mouldGroup(key);
+    if (!g) return;
+    var i = parseInt(btn.getAttribute('data-i'), 10);
+    if (btn.classList.contains('madd')) addMouldRow(key);
+    else if (btn.classList.contains('msave')) saveMouldRow(g, i);
+    else if (btn.classList.contains('medit')) { S.medit = { g: key, i: i }; renderMouldGroup(g); }
+    else if (btn.classList.contains('mdel')) delMouldRow(g, i);
+  };
+  var toolFilter = function (e) {
+    var inp = e.target;
+    if (!inp.classList || !inp.classList.contains('mfilter')) return;
+    var key = inp.getAttribute('data-g');
+    S.mq = S.mq || {};
+    S.mq[key] = inp.value;
+    renderMouldGroup(mouldGroup(key));
+  };
+  if ($('toolboxes')) {
+    $('toolboxes').addEventListener('click', toolClick);
+    $('toolboxes').addEventListener('input', toolFilter);
+  }
+
   $('mat-filter').addEventListener('input', function () {
     S.matFilter = this.value;
     renderData();
@@ -6275,6 +6408,7 @@ function init() {
   if ($('f-code') && !$('f-code').value) $('f-code').value = nextTaskNo();
   renderData();
   buildMouldBoxes();
+  buildToolBoxes();
   fillLaborUI();
   bindLabor();
   bindPush();
