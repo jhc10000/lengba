@@ -3782,7 +3782,22 @@ var TOOL_GROUPS = [
 
 function ensureToolGroups() {
   if (!DB.moulds) DB.moulds = {};
-  TOOL_GROUPS.forEach(function (g) { if (!Array.isArray(DB.moulds[g.key])) DB.moulds[g.key] = []; });
+  DB.meta = DB.meta || {};
+  var seed = seedTools(), filled = false;
+  TOOL_GROUPS.forEach(function (g) {
+    var arr = DB.moulds[g.key];
+    var missing = !Array.isArray(arr) || !arr.length;
+    if (!Array.isArray(arr)) DB.moulds[g.key] = [];
+    /* 老数据里没有这三张表（或当年建成了空表）：一次性按 Excel 默认值补进去 */
+    if (missing && DB.meta.toolSeed !== 1) {
+      DB.moulds[g.key] = seed[g.key] || [];
+      filled = true;
+    }
+  });
+  if (DB.meta.toolSeed !== 1) {
+    DB.meta.toolSeed = 1;
+    if (filled && typeof persist === 'function') persist();
+  }
 }
 
 /* ---------- 工装明细查询（工艺卡模板二用） ---------- */
