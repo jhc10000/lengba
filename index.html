@@ -844,6 +844,13 @@ table.mt input.mtin.l{text-align:left;font-family:inherit}
 .qsave .qsave-list .saveitem{padding:5px 2px}
 .qsave .qsave-list .saveitem .nm{font-size:12.5px}
 .qsave .qsave-list .save-empty{padding:14px 4px}
+/* 相同方案提示条 */
+.samebar{display:none;align-items:center;gap:10px;flex-wrap:wrap;margin:0 0 12px;padding:9px 12px;
+  border-radius:10px;background:#FFF8EC;border:1px solid #E8CFA6;color:#6B4400;font-size:12.5px}
+.samebar.on{display:flex}
+.samebar .tx{flex:1;min-width:200px;line-height:1.45}
+.samebar .tx b{color:#4E3200;font-weight:700}
+.samebar .bt{display:flex;gap:8px;margin-left:auto;flex:0 0 auto}
 /* 搜索框 + 整理名称按钮同一行 */
 .save-tools{display:flex;align-items:center;gap:7px;margin-bottom:8px}
 .save-tools .save-search{margin-bottom:0;flex:1;min-width:0}
@@ -1103,6 +1110,11 @@ table.cmp .worse{color:#AB2A20}
 
   <!-- ============================ 视图：计算 ============================ -->
   <section id="view-calc" class="view" role="tabpanel" aria-label="计算">
+    <!-- 相同方案自动提示：材质 / 工艺方式 / 坯料 / 成品 全对上时出现 -->
+    <div class="samebar" id="same-save">
+      <span class="tx">已有相同方案：<b id="same-save-txt">—</b></span>
+      <span class="bt"><button type="button" class="mini pri" id="same-yes">沿用</button><button type="button" class="mini" id="same-no">自己编</button></span>
+    </div>
     <div class="calc">
 
       <aside class="params">
@@ -2197,7 +2209,7 @@ var persist = function () {
   try { STORE.set(LS, JSON.stringify(DB)); } catch (e) {}
 };
 
-var S = { view: 'calc', mode: 'auto', passes: [], res: null, focusId: null, cmpSel: [] };
+var S = { view: 'calc', mode: 'auto', passes: [], res: null, focusId: null, cmpSel: [], sameAsked: {}, sameHit: null, sameArmed: false };
 
 /* ============================ 表单读写 ============================ */
 function readForm() {
@@ -3540,10 +3552,49 @@ function tidyNames() {
   toast('已整理 ' + changed + ' 个方案名');
 }
 
+/* 相同方案识别：材质 + 工艺方式 + 坯料(外径/壁厚) + 成品(外径/壁厚) 全对上就算同一个方案 */
+function planSig(f, proc) {
+  var r = function (v) { var n = Number(v); return isFinite(n) ? Math.round(n * 100) / 100 : 0; };
+  if (!f) return '';
+  var p = proc || (f.proc || '');
+  return [String(f.matKey || ''), String(p), r(f.d0), r(f.s0), r(f.d1), r(f.s1)].join('|');
+}
+
+function findSameSave(f) {
+  var sig = planSig(f, DB.proc);
+  if (!sig) return null;
+  for (var i = 0; i < DB.saves.length; i++) {
+    var s = DB.saves[i], sf = (s.snap && s.snap.form) || {};
+    var sp = (s.snap && s.snap.proc) || sf.proc || '';
+    if (planSig(sf, sp) === sig) return { i: i, s: s, sig: sig };
+  }
+  return null;
+}
+
+/* 每次重算后检查一次：命中且这次没问过，就显示提示条 */
+function checkSameSave() {
+  var bar = $('same-save');
+  if (!bar) return;
+  /* 刚打开页面先不打扰：等用户动过参数再提示 */
+  if (!S.sameArmed) { bar.classList.remove('on'); return; }
+  var f = readForm();
+  var ready = Number(f.d0) > 0 && Number(f.s0) > 0 && Number(f.d1) > 0 && Number(f.s1) > 0;
+  if (!ready) { bar.classList.remove('on'); return; }
+  var hit = findSameSave(f);
+  if (!hit || S.sameAsked[hit.sig]) { bar.classList.remove('on'); return; }
+  S.sameHit = hit;
+  var d = new Date(hit.s.at);
+  var when = d.getFullYear() + '-' + ('0' + (d.getMonth() + 1)).slice(-2) + '-' + ('0' + d.getDate()).slice(-2) +
+    ' ' + ('0' + d.getHours()).slice(-2) + ':' + ('0' + d.getMinutes()).slice(-2);
+  if ($('same-save-txt')) $('same-save-txt').textContent = saveLabel(hit.s) + '（' + when + ' 存）';
+  bar.classList.add('on');
+}
+
 /* 保存当前方案（基础数据页、计算页共用） */
 function saveCurrentPlan() {
   var f = readForm();
   var name = ((f.name || '未命名产品') + (saveSpec(f) ? ' ' + saveSpec(f) : '')).trim();
+  S.sameAsked[planSig(f, DB.proc)] = 1;
   var snap = { form: f, card: readCard(), mode: S.mode, passes: S.passes, proc: DB.proc };
   var exist = DB.saves.findIndex(function (s) { return s.name === name; });
   if (exist >= 0) {
@@ -4894,6 +4945,7 @@ function renderAll() {
   renderLen1(res);
   renderSheet(res);
   if ($('w-rows')) renderLabor();
+  checkSameSave();
 }
 
 /* ============================ 交互 ============================ */
@@ -5503,6 +5555,31 @@ function bindEvents() {
     if (ev.target === $('qload-modal')) $('qload-modal').classList.remove('on');
   });
   if ($('qload-search')) $('qload-search').addEventListener('input', renderSaves);
+  /* 用户一动参数，就武装相同方案检查 */
+  if ($('view-calc')) {
+    ['input', 'change'].forEach(function (ev) {
+      $('view-calc').addEventListener(ev, function (e) {
+        var t = e.target;
+        if (t && t.closest && t.closest('.qsave, .samebar, #qload-modal')) return;
+        S.sameArmed = true;
+      }, true);
+    });
+  }
+
+  /* 相同方案提示：沿用 / 自己编 */
+  if ($('same-yes')) $('same-yes').addEventListener('click', function () {
+    if (!S.sameHit) return;
+    S.sameAsked[S.sameHit.sig] = 1;
+    var idx = S.sameHit.i;
+    $('same-save').classList.remove('on');
+    loadSave(idx);
+  });
+  if ($('same-no')) $('same-no').addEventListener('click', function () {
+    if (S.sameHit) S.sameAsked[S.sameHit.sig] = 1;
+    $('same-save').classList.remove('on');
+    toast('好的，自己编：参数不变，可继续微调');
+  });
+
   /* 计算页「载入」按钮（基础数据页的载入由 #view-data 的委托处理） */
   document.addEventListener('click', function (ev) {
     var t = ev.target;
@@ -5858,6 +5935,8 @@ function printBatchGroup(key) {
 function loadSave(i) {
   var s = DB.saves[i];
   if (!s) return;
+  var sf = (s.snap && s.snap.form) || {};
+  S.sameAsked[planSig(sf, (s.snap && s.snap.proc) || sf.proc || '')] = 1;
   applySaveSnap(s.snap);
   switchView('calc');
   toast('已载入：' + saveLabel(s));
