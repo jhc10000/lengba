@@ -3367,13 +3367,14 @@ function renderSheet2(res, card) {
     var specIn = r && r.die && r.die.inn ? String(r.die.inn.spec != null && r.die.inn.spec !== '' ? r.die.inn.spec : r.die.inn.v) : '';
     /* 芯杆 / 钳口（冷轧为 顶杆 / 齿数）：优先取基础数据的工装明细，查不到才回退老的自动值 */
     var coreV, jawV;
-    var idV = oD - 2 * oS;
+    /* 芯杆/顶杆按该道内模（冷轧芯棒）规格查；钳口按该道外模（轧辊）规格查 */
+    var idFallback = f2(oD - 2 * oS);
     if (isRollMode) {
-      coreV = findPushRod(idV) || f2(idV);
+      coreV = findPushRod(specIn) || idFallback;
       jawV = gearCount(oD);
     } else {
-      coreV = findRod(idV) || f2(idV);
-      jawV = findJaw(m ? m.name : '', f.d0 || oD) || f2(oD);
+      coreV = findRod(specIn) || idFallback;
+      jawV = findJaw(m ? m.name : '', specOut || oD) || f2(oD);
     }
     h.push('<tr>' +
       '<td>' + no + '</td>' +
@@ -3771,11 +3772,11 @@ function mouldGroup(key) {
 
 /* ===== 芯杆 / 钳口 / 顶杆明细（基础数据页面，工艺卡模板二取这里） ===== */
 var TOOL_GROUPS = [
-  { key: 'rod', name: '芯杆（冷拔）', desc: '按「内径上限」查芯杆：内径 ≤ 上限即取该档；模板二冷拔「芯杆」列取这里',
+  { key: 'rod', name: '芯杆（冷拔）', desc: '按该道「内模规格」查，超过上限才升档；模板二冷拔「芯杆」列取这里',
     cols: [['spec', '内径上限', 'n', '30%'], ['s1', '芯杆规格', 'n', '28%'], ['note', '备注', 'l', '42%']] },
-  { key: 'jaw', name: '钳口', desc: '按「机组 + 外径上限」查钳口；机组空白＝所有机组通用，选 LB-800T 时取 800T 那组',
+  { key: 'jaw', name: '钳口', desc: '按该道「外模规格」查钳口；机组空白＝所有机组通用，选 LB-800T 时取 800T 那组',
     cols: [['spec', '机组', 'l', '18%'], ['s1', '外径上限', 'n', '22%'], ['s2', '钳口规格', 'n', '24%'], ['note', '备注', 'l', '36%']] },
-  { key: 'pushrod', name: '顶杆（冷轧）', desc: '按「内径上限」查顶杆：内径 ≤ 上限即取该档；模板二冷轧「顶杆」列取这里',
+  { key: 'pushrod', name: '顶杆（冷轧）', desc: '按该道「内模（芯棒）规格」查，超过上限才升档；模板二冷轧「顶杆」列取这里',
     cols: [['spec', '内径上限', 'n', '30%'], ['s1', '顶杆规格', 'n', '28%'], ['note', '备注', 'l', '42%']] }
 ];
 
@@ -3801,11 +3802,25 @@ function pickByCeil(rows, val, tKey, outKey) {
   return hit || maxHit;
 }
 
-/* 芯杆：按内径查（内径上限 → 芯杆规格） */
-function findRod(idVal) { return pickByCeil(toolRows('rod'), idVal, 'spec', 's1'); }
+/* 上限档查表（翻过来）：取「不大于 val 的最大上限档」，即超过上限才升档；比最小档还小就取最小档 */
+function pickByFloor(rows, val, tKey, outKey) {
+  var v = parseFloat(val);
+  if (!isFinite(v)) return '';
+  var best = -Infinity, hit = '', minT = Infinity, minHit = '';
+  rows.forEach(function (r) {
+    var t = parseFloat(r[tKey]), o = String(r[outKey] == null ? '' : r[outKey]).trim();
+    if (!isFinite(t) || !o) return;
+    if (t <= v + 1e-6 && t > best) { best = t; hit = o; }
+    if (t < minT) { minT = t; minHit = o; }
+  });
+  return hit || minHit;
+}
 
-/* 顶杆：按内径查 */
-function findPushRod(idVal) { return pickByCeil(toolRows('pushrod'), idVal, 'spec', 's1'); }
+/* 芯杆：按该道「内模规格」查（翻：超过上限才升档） */
+function findRod(specIn) { return pickByFloor(toolRows('rod'), specIn, 'spec', 's1'); }
+
+/* 顶杆：按该道「内模（芯棒）规格」查，规则同芯杆 */
+function findPushRod(specIn) { return pickByFloor(toolRows('pushrod'), specIn, 'spec', 's1'); }
 
 /* 机组吨位：LB-800T → 800T；查不到返回 '' */
 function tonOf(name) {
