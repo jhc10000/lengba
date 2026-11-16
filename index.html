@@ -3773,8 +3773,8 @@ function mouldGroup(key) {
 var TOOL_GROUPS = [
   { key: 'rod', name: '芯杆（冷拔）', desc: '按「内径上限」查芯杆：内径 ≤ 上限即取该档；模板二冷拔「芯杆」列取这里',
     cols: [['spec', '内径上限', 'n', '30%'], ['s1', '芯杆规格', 'n', '28%'], ['note', '备注', 'l', '42%']] },
-  { key: 'jaw', name: '钳口', desc: '按「机组 + 外径上限」查钳口；机组选 LB-800T 时取 800T 那组',
-    cols: [['spec', '机组', 'l', '24%'], ['s1', '外径上限', 'n', '24%'], ['s2', '钳口规格', 'l', '22%'], ['note', '备注', 'l', '30%']] },
+  { key: 'jaw', name: '钳口', desc: '按「机组 + 外径上限」查钳口；机组空白＝所有机组通用，选 LB-800T 时取 800T 那组',
+    cols: [['spec', '机组', 'l', '20%'], ['s1', '外径上限', 'n', '24%'], ['s2', '钳口规格', 'l', '24%'], ['note', '备注', 'l', '32%']] },
   { key: 'pushrod', name: '顶杆（冷轧）', desc: '按「内径上限」查顶杆：内径 ≤ 上限即取该档；模板二冷轧「顶杆」列取这里',
     cols: [['spec', '内径上限', 'n', '30%'], ['s1', '顶杆规格', 'n', '28%'], ['note', '备注', 'l', '42%']] }
 ];
@@ -3909,6 +3909,7 @@ function renderMouldGroup(g) {
     } else {
       html.push('<tr data-i="' + i + '">' + g.cols.map(function (c) {
         var v = r[c[0]] || '';
+        if (g.key === 'jaw' && c[0] === 'spec' && !String(v).trim()) v = '通用';
         return '<td class="' + (c[2] === 'l' ? 'l' : '') + '" title="' + esc(v) + '">' + esc(v) + '</td>';
       }).join('') + '<td class="mact">' +
         '<button type="button" class="mbtn medit" data-g="' + g.key + '" data-i="' + i + '" aria-label="编辑该行">改</button>' +
