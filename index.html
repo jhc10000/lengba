@@ -4915,6 +4915,26 @@ function computePush(res) {
     r.needLen = r.lc + 20;
     r.over = o.cap > 0 && r.need > o.cap + 1e-6;
     r.short = r.delta > 0 && o.lenIn < r.needLen;
+    /* 车头方案：机头不够时，先把坯料端部车小再挤头。
+       P = m·σs·(D² − d²)/(4000·tanα) → 反解 D = √(d² + (cap/sf)/k)，k = m·σs/(4000·tanα) */
+    r.turn = 0;
+    r.dMax = 0;
+    if (r.over && o.p > 0 && r.d > 0 && r.inD > 0) {
+      var kk = o.p / (4000 * Math.tan(o.angle * Math.PI / 180));
+      var capOK = o.cap / o.sf;
+      if (kk > 0) {
+        var dMax = Math.sqrt(r.d * r.d + capOK / kk);
+        dMax = Math.floor(dMax * 10) / 10;          /* 往下取 0.1，保证不超 */
+        if (dMax < r.inD - 1e-9) {
+          r.dMax = dMax;
+          r.turn = (r.inD - dMax) / 2;              /* 单边车削量 */
+          var dm2 = (dMax + r.d) / 2;
+          var lc2 = (dMax - r.d) / 2 / Math.tan(o.angle * Math.PI / 180);
+          r.Pafter = o.p * dm2 * lc2 / 1000;
+          r.utilAfter = o.cap > 0 ? r.Pafter / o.cap * 100 : 0;
+        }
+      }
+    }
     return r;
   };
   var rows = [];
@@ -4958,6 +4978,7 @@ function computePush(res) {
   o.dmax = o.n > 1 ? o.delta / o.n : o.delta;
   o.needLen = worst.needLen;
   o.overRows = rows.filter(function (r) { return r.over; });
+  o.turnRows = rows.filter(function (r) { return r.dMax > 0; });
   o.st = 'ok';
   o.title = '挤头力在设备能力内';
   o.msg = '';
@@ -4975,7 +4996,9 @@ function computePush(res) {
     o.msg = '第 ' + o.overRows.map(function (r) { return r.i; }).join('、') + ' 道超：需 ' +
       f0(Math.max.apply(null, o.overRows.map(function (r) { return r.need; }))) + ' kN（含安全系数 ' + f1(o.sf) + '），' +
       (o.mach ? o.mach + ' ' : '设备 ') + f0(o.cap) + ' kN 不够。建议该道分 ' + o.n +
-      ' 次挤，每次单边减径 ≤ ' + f2(o.dmax) + ' mm；或端部加热改热挤，也可在基础数据里换更大吨位机头。';
+      ' 次挤，每次单边减径 ≤ ' + f2(o.dmax) + ' mm；' +
+      (o.turnRows.length ? '也可以先车头（见下方「车头方案」，车小后可一次挤成）；' : '') +
+      '或端部加热改热挤，也可在基础数据里换更大吨位机头。';
   } else if (o.util >= 90) {
     o.st = 'warn'; o.title = '接近机头能力上限';
     o.msg = '第 ' + worst.i + ' 道利用率 ' + f1(o.util) + '%，建议留余量或分 2 次挤。';
@@ -4988,6 +5011,17 @@ function computePush(res) {
     if (o.st === 'ok') o.st = 'warn';
   }
   return o;
+}
+
+/* 车头方案小表：机头不够时，把端部车小再挤头 */
+function turnBlockHtml(o) {
+  if (!o.turnRows || !o.turnRows.length) return '';
+  return '<div class="pushper"><div class="ph">车头方案（先把端部车到下列外径，再按原尺寸挤头，可一次挤成）</div>' +
+    '<div class="pt"><table><tr><th>道次</th><th>原入口 Φ</th><th>车头到 Φ</th><th>单边车削</th><th>车后挤头力</th><th>利用率</th></tr>' +
+    o.turnRows.map(function (r) {
+      return '<tr class="ok"><td>' + r.i + '</td><td>' + f1(r.inD) + '</td><td><b>' + f1(r.dMax) + '</b></td>' +
+        '<td>' + f2(r.turn) + '</td><td>' + f0(r.Pafter) + '</td><td>' + f0(r.utilAfter) + '%</td></tr>';
+    }).join('') + '</table></div></div>';
 }
 
 function renderPush(res) {
@@ -5062,7 +5096,7 @@ function renderPush(res) {
     '　<span style="color:#737C82">（' + esc(o.mat || '未选材质') + ' 屈服 ' + f0(o.ysNom) + ' MPa；' + angTxt +
     '；m=' + f2(o.k) + '；' + (o.mach ? esc(o.mach) + ' 挤头能力 ' + f0(o.cap) + ' kN' : '机组未填挤头能力') +
     '；安全系数 ' + f1(o.sf) + '；变形区+导入需 ≥ ' + f0(o.needLen) + ' mm）</span></div>' +
-    perRows;
+    perRows + turnBlockHtml(o);
 }
 
 function bindPush() {
