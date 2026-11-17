@@ -1258,6 +1258,7 @@ table.cmp .worse{color:#AB2A20}
           <div class="pushgrid">
             <label class="pf"><span>坯料外径 mm</span><input id="p-D" type="text" readonly value="—"></label>
             <label class="pf"><span>挤头后外径 mm</span><input id="p-d" type="number" step="0.1" min="0" value="" placeholder="自动"></label>
+            <label class="pf"><span title="挤头端比该道外模小多少才好穿模；填 0 就是直接挤到外模尺寸">穿模余量 mm</span><input id="p-gap" type="number" step="0.1" min="0" value=""></label>
             <label class="pf"><span>模锥半角 α °</span><input id="p-angle" type="number" step="0.5" min="1" value=""></label>
             <label class="pf"><span>压力系数 m</span><input id="p-k" type="number" step="0.05" min="0.5" value=""></label>
             <label class="pf"><span>挤头温度</span><select id="p-hot"><option value="0">冷挤</option><option value="1">热挤（σs×0.35）</option></select></label>
@@ -1869,7 +1870,7 @@ var DEFAULT_DB = {
   limits: { maxRed: 14, maxWall: 20, maxArea: 28, maxMu: 1.4, anneal: true, annealThr: 45 },
   limitsRoll: { maxRed: 12, maxWall: 20, maxArea: 25, maxMu: 1.4, anneal: true, annealThr: 45 },
   /* 挤头（管端打头）力校核：d=0 时按首道外模实际尺寸−1 自动取；hot=1 为热挤；full=1 表示角度按全锥角输入 */
-  push: { d: 0, angle: 7, full: 0, k: 1.4, hot: 0, mach: '挤头机 60t', cap: 600, sf: 1.3, len: 250 },
+  push: { d: 0, angle: 7, full: 0, k: 1.4, hot: 0, mach: '', cap: 600, sf: 1.3, len: 250, gap: 1 },
   proc: 'draw',
   /* 成品公差：按内径分档，odUp/odDn 外径上/下偏差，idUp/idDn 内径上/下偏差 */
   tolerances: [
@@ -4876,8 +4877,10 @@ function computePush(res) {
   /* 设备选择：机组自带机头能力优先（选了具体挤头机才用那台的） */
   var mach = null;
   if (P.mach) mach = pool.find(function (m) { return m.name === P.mach; }) || null;
-  if (!mach) mach = (own && Number(own.pushKN) > 0) ? own : (pool[0] || null);
+  if (!mach && own && Number(own.pushKN) > 0) mach = own;   /* 机组没填挤头能力就不再借用别的机组 */
   var aIn = Math.max(Number(P.angle) || 15, 0.5);
+  var gap = Number(P.gap);
+  gap = isFinite(gap) && gap >= 0 ? gap : 1;
   var o = {
     D: Math.max(Number(f.d0) || 0, 0),
     fullOn: !!Number(P.full),
@@ -4888,7 +4891,7 @@ function computePush(res) {
     mach: mach ? mach.name : '',
     machOwn: !!(own && mach && mach.name === own.name),
     machT: mach ? Math.round((Number(mach.pushKN) || Number(mach.kN)) / 9.80665) : 0,
-    cap: Math.max(mach ? Number(mach.pushKN) : (Number(P.cap) || 600), 1),
+    cap: mach ? Math.max(Number(mach.pushKN) || 0, 1) : 0,
     sf: Math.max(Number(P.sf) || 1.3, 1),
     lenIn: Math.max(Number(P.len) || 120, 1)
   };
@@ -4907,10 +4910,10 @@ function computePush(res) {
     r.F = r.lc * r.Dm;
     r.P = o.p * r.F / 1000;
     r.t = r.P / 9.80665;
-    r.util = r.P / o.cap * 100;
+    r.util = o.cap > 0 ? r.P / o.cap * 100 : 0;
     r.need = r.P * o.sf;
     r.needLen = r.lc + 20;
-    r.over = r.need > o.cap + 1e-6;
+    r.over = o.cap > 0 && r.need > o.cap + 1e-6;
     r.short = r.delta > 0 && o.lenIn < r.needLen;
     return r;
   };
@@ -4919,7 +4922,7 @@ function computePush(res) {
     var prev = Number(f.d0) || 0;
     res.rows.forEach(function (rr, i) {
       var dieV = (rr.die && rr.die.out && Number(rr.die.out.v) > 0) ? Number(rr.die.out.v) : 0;
-      var endD = dieV ? Math.max(dieV - 1, 0) : Math.max(Number(rr.d) - 1, 0);
+      var endD = dieV ? Math.max(dieV - gap, 0) : Math.max(Number(rr.d) - gap, 0);
       if (Number(P.d) > 0 && res.rows.length === 1) endD = Number(P.d);
       var g = one(prev, endD);
       g.i = i + 1;
@@ -4930,7 +4933,7 @@ function computePush(res) {
   } else {
     var die0 = 0;
     var tgt0 = die0 || (Number(f.d0) || 0);
-    var autoEnd = tgt0 > 0 ? Math.max(tgt0 - 1, 0) : 0;
+    var autoEnd = tgt0 > 0 ? Math.max(tgt0 - gap, 0) : 0;
     var g0 = one(Number(f.d0) || 0, Number(P.d) > 0 ? Number(P.d) : autoEnd);
     g0.i = 1; g0.dieEnd = Number(P.d) > 0 ? Number(P.d) : autoEnd;
     rows.push(g0);
@@ -4951,7 +4954,7 @@ function computePush(res) {
   o.t = worst.t;
   o.util = worst.util;
   o.need = worst.need;
-  o.n = o.need > o.cap + 1e-6 ? Math.ceil(o.need / o.cap) : 1;
+  o.n = (o.cap > 0 && o.need > o.cap + 1e-6) ? Math.ceil(o.need / o.cap) : 1;
   o.dmax = o.n > 1 ? o.delta / o.n : o.delta;
   o.needLen = worst.needLen;
   o.overRows = rows.filter(function (r) { return r.over; });
@@ -4960,6 +4963,11 @@ function computePush(res) {
   o.msg = '';
   if (!(o.D > 0)) {
     o.st = 'warn'; o.title = '待补坯料外径';
+  } else if (!(o.cap > 0)) {
+    o.st = 'warn'; o.title = '机组未填挤头能力';
+    o.msg = (own && own.name ? own.name : '当前机组') +
+      ' 在「基础数据 → 机组能力」里没填「挤头能力 kN」，无法判断够不够（不再借用别的机组）。' +
+      '补上这一格，或在上面的「机头 / 挤头设备」里手动选一台挤头机。';
   } else if (!(o.delta > 0)) {
     o.st = 'bad'; o.title = '挤头后外径需小于坯料外径';
   } else if (o.overRows.length) {
@@ -5000,7 +5008,7 @@ function renderPush(res) {
       }).join('');
     sel.innerHTML = list;
   }
-  var map = { 'p-d': 'd', 'p-angle': 'angle', 'p-k': 'k', 'p-sf': 'sf', 'p-len': 'len' };
+  var map = { 'p-d': 'd', 'p-gap': 'gap', 'p-angle': 'angle', 'p-k': 'k', 'p-sf': 'sf', 'p-len': 'len' };
   Object.keys(map).forEach(function (id) {
     var el = $(id);
     if (!el) return;
@@ -5029,13 +5037,13 @@ function renderPush(res) {
   /* 多道次：每道拔前都要挤头，逐道判机头够不够 */
   var perRows = '';
   if (o.rows && o.rows.length > 1) {
-    perRows = '<div class="pushper"><div class="ph">各道次机头校核（每道拔前都要挤头，按该道入口外径 → 该道外模−1 算）</div>' +
+    perRows = '<div class="pushper"><div class="ph">各道次机头校核（每道拔前都要挤头，按该道入口外径 → 该道外模 − 穿模余量算）</div>' +
       '<div class="pt"><table><tr><th>道次</th><th>入口→挤头 Φ</th><th>单边 Δ</th><th>挤头力 kN</th><th>利用率</th><th>机头</th></tr>' +
       o.rows.map(function (r) {
-        var cls = r.over ? 'bad' : (r.util >= 90 ? 'warn' : 'ok');
-        var txt = r.over ? '超' : (r.util >= 90 ? '临界' : '通过');
+        var cls = o.cap > 0 ? (r.over ? 'bad' : (r.util >= 90 ? 'warn' : 'ok')) : 'warn';
+        var txt = o.cap > 0 ? (r.over ? '超' : (r.util >= 90 ? '临界' : '通过')) : '未填';
         return '<tr class="' + cls + '"><td>' + r.i + '</td><td>' + f1(r.inD) + '→' + f1(r.d) + '</td>' +
-          '<td>' + f2(r.delta) + '</td><td>' + f0(r.P) + '</td><td>' + f0(r.util) + '%</td>' +
+          '<td>' + f2(r.delta) + '</td><td>' + f0(r.P) + '</td><td>' + (o.cap > 0 ? f0(r.util) + '%' : '—') + '</td>' +
           '<td class="st">' + txt + '</td></tr>';
       }).join('') + '</table></div></div>';
   }
@@ -5048,17 +5056,17 @@ function renderPush(res) {
     '<div class="po"><div class="k">单位压力 p = m·σs</div><div class="v">' + f0(o.p) + '<small>MPa</small></div></div>' +
     '<div class="po"><div class="k">挤头力 P</div><div class="v" style="color:' + col + '">' + f0(o.P) + '<small>kN</small></div></div>' +
     '<div class="po"><div class="k">折合</div><div class="v">' + f1(o.t) + '<small>t</small></div></div>' +
-    '<div class="po"><div class="k">设备利用率</div><div class="v" style="color:' + col + '">' + f1(o.util) + '<small>%</small></div></div>' +
+    '<div class="po"><div class="k">设备利用率</div><div class="v" style="color:' + col + '">' + (o.cap > 0 ? f1(o.util) : '—') + '<small>' + (o.cap > 0 ? '%' : '') + '</small></div></div>' +
     '<div class="po"><div class="k">σs' + (o.hotOn ? '（热挤折减）' : '') + '</div><div class="v">' + f0(o.ys) + '<small>MPa</small></div></div>' +
     '<div class="concl ' + o.st + '"><b>' + esc(o.title) + '</b>' + (o.msg ? '　' + esc(o.msg) : '') +
     '　<span style="color:#737C82">（' + esc(o.mat || '未选材质') + ' 屈服 ' + f0(o.ysNom) + ' MPa；' + angTxt +
-    '；m=' + f2(o.k) + '；' + (o.mach ? esc(o.mach) + ' 挤头能力 ' + f0(o.cap) + ' kN' : '未填挤头能力，暂按 ' + f0(o.cap) + ' kN') +
+    '；m=' + f2(o.k) + '；' + (o.mach ? esc(o.mach) + ' 挤头能力 ' + f0(o.cap) + ' kN' : '机组未填挤头能力') +
     '；安全系数 ' + f1(o.sf) + '；变形区+导入需 ≥ ' + f0(o.needLen) + ' mm）</span></div>' +
     perRows;
 }
 
 function bindPush() {
-  var map = { 'p-d': 'd', 'p-angle': 'angle', 'p-k': 'k', 'p-hot': 'hot', 'p-full': 'full', 'p-sf': 'sf', 'p-len': 'len' };
+  var map = { 'p-d': 'd', 'p-gap': 'gap', 'p-angle': 'angle', 'p-k': 'k', 'p-hot': 'hot', 'p-full': 'full', 'p-sf': 'sf', 'p-len': 'len' };
   Object.keys(map).forEach(function (id) {
     var el = $(id);
     if (!el) return;
