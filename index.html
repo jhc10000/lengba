@@ -5178,6 +5178,8 @@ function setProc(v) {
   if (DB.proc === v) return;
   DB.proc = v;
   S.passes = [];
+  /* 冷拔/冷轧的机组池不同，挤头设备跟着回到「跟随机组」 */
+  if (DB.push && typeof DB.push === 'object') DB.push.mach = '';
   persist();
   fillSelects();
   renderAll();
@@ -5295,6 +5297,9 @@ function bindEvents() {
     renderAll();
   });
   $('top-machine').addEventListener('change', function () {
+    /* 切换机台时，挤头设备回到「跟随机组」；只有手动选过的那次才用所选设备的数据 */
+    pushParam().mach = '';
+    persist();
     fillSelects(); renderAll();
   });
   ['f-name', 'f-code'].forEach(function (id) {
