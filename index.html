@@ -4915,6 +4915,8 @@ function computePush(res) {
     r.needLen = r.lc + 20;
     r.over = o.cap > 0 && r.need > o.cap + 1e-6;
     r.short = r.delta > 0 && o.lenIn < r.needLen;
+    r.nSplit = (o.cap > 0 && r.need > o.cap + 1e-6) ? Math.ceil(r.need / o.cap) : 1;
+    r.dSplit = r.nSplit > 1 ? r.delta / r.nSplit : r.delta;
     /* 车头方案：机头不够时，先把坯料端部车小再挤头。
        P = m·σs·(D² − d²)/(4000·tanα) → 反解 D = √(d² + (cap/sf)/k)，k = m·σs/(4000·tanα) */
     r.turn = 0;
@@ -4978,7 +4980,8 @@ function computePush(res) {
   o.dmax = o.n > 1 ? o.delta / o.n : o.delta;
   o.needLen = worst.needLen;
   o.overRows = rows.filter(function (r) { return r.over; });
-  o.turnRows = rows.filter(function (r) { return r.dMax > 0; });
+  /* 车头只在冷拔前对坯料车一次，多道冷拔中途不加车头工序 → 只有第 1 道可给车头方案 */
+  o.turnRows = rows.filter(function (r, i) { return i === 0 && r.dMax > 0; });
   o.st = 'ok';
   o.title = '挤头力在设备能力内';
   o.msg = '';
@@ -4997,7 +5000,7 @@ function computePush(res) {
       f0(Math.max.apply(null, o.overRows.map(function (r) { return r.need; }))) + ' kN（含安全系数 ' + f1(o.sf) + '），' +
       (o.mach ? o.mach + ' ' : '设备 ') + f0(o.cap) + ' kN 不够。建议该道分 ' + o.n +
       ' 次挤，每次单边减径 ≤ ' + f2(o.dmax) + ' mm；' +
-      (o.turnRows.length ? '也可以先车头（见下方「车头方案」，车小后可一次挤成）；' : '') +
+      (o.turnRows.length ? '第 1 道也可以先车头（见下方「车头方案」，车小后可一次挤成）；' : '') +
       '或端部加热改热挤，也可在基础数据里换更大吨位机头。';
   } else if (o.util >= 90) {
     o.st = 'warn'; o.title = '接近机头能力上限';
@@ -5016,12 +5019,13 @@ function computePush(res) {
 /* 车头方案小表：机头不够时，把端部车小再挤头 */
 function turnBlockHtml(o) {
   if (!o.turnRows || !o.turnRows.length) return '';
-  return '<div class="pushper"><div class="ph">车头方案（先把端部车到下列外径，再按原尺寸挤头，可一次挤成）</div>' +
+  return '<div class="pushper"><div class="ph">车头方案（车头只在冷拔前对坯料车一次；车到下列外径后，第 1 道可一次挤成）</div>' +
     '<div class="pt"><table><tr><th>道次</th><th>原入口 Φ</th><th>车头到 Φ</th><th>单边车削</th><th>车后挤头力</th><th>利用率</th></tr>' +
     o.turnRows.map(function (r) {
       return '<tr class="ok"><td>' + r.i + '</td><td>' + f1(r.inD) + '</td><td><b>' + f1(r.dMax) + '</b></td>' +
         '<td>' + f2(r.turn) + '</td><td>' + f0(r.Pafter) + '</td><td>' + f0(r.utilAfter) + '%</td></tr>';
-    }).join('') + '</table></div></div>';
+    }).join('') + '</table></div>' +
+    '<div class="ph" style="margin-top:4px">第 2 道及以后不能加车头工序，超限只能分次挤或改热挤。</div></div>';
 }
 
 function renderPush(res) {
@@ -5072,10 +5076,12 @@ function renderPush(res) {
   var perRows = '';
   if (o.rows && o.rows.length > 1) {
     perRows = '<div class="pushper"><div class="ph">各道次机头校核（每道拔前都要挤头，按该道入口外径 → 该道外模 − 穿模余量算）</div>' +
-      '<div class="pt"><table><tr><th>道次</th><th>入口→挤头 Φ</th><th>单边 Δ</th><th>挤头力 kN</th><th>利用率</th><th>机头</th></tr>' +
+      '<div class="pt"><table><tr><th>道次</th><th>入口→挤头 Φ</th><th>单边 Δ</th><th>挤头力 kN</th><th>利用率</th><th>判定</th></tr>' +
       o.rows.map(function (r) {
         var cls = o.cap > 0 ? (r.over ? 'bad' : (r.util >= 90 ? 'warn' : 'ok')) : 'warn';
-        var txt = o.cap > 0 ? (r.over ? '超' : (r.util >= 90 ? '临界' : '通过')) : '未填';
+        var txt = o.cap > 0
+          ? (r.over ? ((r.i === 1 && r.dMax > 0) ? '超·可车头' : '超·分 ' + r.nSplit + ' 次') : (r.util >= 90 ? '临界' : '通过'))
+          : '未填';
         return '<tr class="' + cls + '"><td>' + r.i + '</td><td>' + f1(r.inD) + '→' + f1(r.d) + '</td>' +
           '<td>' + f2(r.delta) + '</td><td>' + f0(r.P) + '</td><td>' + (o.cap > 0 ? f0(r.util) + '%' : '—') + '</td>' +
           '<td class="st">' + txt + '</td></tr>';
