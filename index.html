@@ -4912,6 +4912,8 @@ function computePush(res) {
     r.t = r.P / 9.80665;
     r.util = o.cap > 0 ? r.P / o.cap * 100 : 0;
     r.need = r.P * o.sf;
+    r.needT = r.need / 9.80665;
+    r.utilNeed = o.cap > 0 ? r.need / o.cap * 100 : 0;
     r.needLen = r.lc + 20;
     r.over = o.cap > 0 && r.need > o.cap + 1e-6;
     r.short = r.delta > 0 && o.lenIn < r.needLen;
@@ -4976,6 +4978,8 @@ function computePush(res) {
   o.t = worst.t;
   o.util = worst.util;
   o.need = worst.need;
+  o.needT = worst.needT;
+  o.utilNeed = worst.utilNeed;
   o.n = (o.cap > 0 && o.need > o.cap + 1e-6) ? Math.ceil(o.need / o.cap) : 1;
   o.dmax = o.n > 1 ? o.delta / o.n : o.delta;
   o.needLen = worst.needLen;
@@ -5076,14 +5080,15 @@ function renderPush(res) {
   var perRows = '';
   if (o.rows && o.rows.length > 1) {
     perRows = '<div class="pushper"><div class="ph">各道次机头校核（每道拔前都要挤头，按该道入口外径 → 该道外模 − 穿模余量算）</div>' +
-      '<div class="pt"><table><tr><th>道次</th><th>入口→挤头 Φ</th><th>单边 Δ</th><th>挤头力 kN</th><th>利用率</th><th>判定</th></tr>' +
+      '<div class="pt"><table><tr><th>道次</th><th>入口→挤头 Φ</th><th>单边 Δ</th><th>挤头力 kN</th><th>需用 kN</th><th>利用率(含SF)</th><th>判定</th></tr>' +
       o.rows.map(function (r) {
-        var cls = o.cap > 0 ? (r.over ? 'bad' : (r.util >= 90 ? 'warn' : 'ok')) : 'warn';
+        var cls = o.cap > 0 ? (r.over ? 'bad' : (r.utilNeed >= 90 ? 'warn' : 'ok')) : 'warn';
         var txt = o.cap > 0
-          ? (r.over ? ((r.i === 1 && r.dMax > 0) ? '超·可车头' : '超·分 ' + r.nSplit + ' 次') : (r.util >= 90 ? '临界' : '通过'))
+          ? (r.over ? ((r.i === 1 && r.dMax > 0) ? '超·可车头' : '超·分 ' + r.nSplit + ' 次') : (r.utilNeed >= 90 ? '临界' : '通过'))
           : '未填';
         return '<tr class="' + cls + '"><td>' + r.i + '</td><td>' + f1(r.inD) + '→' + f1(r.d) + '</td>' +
-          '<td>' + f2(r.delta) + '</td><td>' + f0(r.P) + '</td><td>' + (o.cap > 0 ? f0(r.util) + '%' : '—') + '</td>' +
+          '<td>' + f2(r.delta) + '</td><td>' + f0(r.P) + '</td><td>' + f0(r.need) + '</td>' +
+          '<td>' + (o.cap > 0 ? f0(r.utilNeed) + '%' : '—') + '</td>' +
           '<td class="st">' + txt + '</td></tr>';
       }).join('') + '</table></div></div>';
   }
@@ -5094,9 +5099,11 @@ function renderPush(res) {
     '<div class="po"><div class="k">变形区长 l = Δ/tanα</div><div class="v">' + f1(o.lc) + '<small>mm</small></div></div>' +
     '<div class="po"><div class="k">投影面积 F = D_m·l</div><div class="v">' + f0(o.F) + '<small>mm²</small></div></div>' +
     '<div class="po"><div class="k">单位压力 p = m·σs</div><div class="v">' + f0(o.p) + '<small>MPa</small></div></div>' +
-    '<div class="po"><div class="k">挤头力 P</div><div class="v" style="color:' + col + '">' + f0(o.P) + '<small>kN</small></div></div>' +
-    '<div class="po"><div class="k">折合</div><div class="v">' + f1(o.t) + '<small>t</small></div></div>' +
-    '<div class="po"><div class="k">设备利用率</div><div class="v" style="color:' + col + '">' + (o.cap > 0 ? f1(o.util) : '—') + '<small>' + (o.cap > 0 ? '%' : '') + '</small></div></div>' +
+    '<div class="po"><div class="k">挤头力 P（理论）</div><div class="v" style="color:' + col + '">' + f0(o.P) + '<small>kN</small></div></div>' +
+    '<div class="po"><div class="k">需用 P×SF</div><div class="v" style="color:' + col + '">' + f0(o.need) +
+      '<small>kN · 折合 ' + f1(o.needT) + ' t</small></div></div>' +
+    '<div class="po"><div class="k">折合（理论）</div><div class="v">' + f1(o.t) + '<small>t</small></div></div>' +
+    '<div class="po"><div class="k">设备利用率（含 SF）</div><div class="v" style="color:' + col + '">' + (o.cap > 0 ? f1(o.utilNeed) : '—') + '<small>' + (o.cap > 0 ? '%' : '') + '</small></div></div>' +
     '<div class="po"><div class="k">σs' + (o.hotOn ? '（热挤折减）' : '') + '</div><div class="v">' + f0(o.ys) + '<small>MPa</small></div></div>' +
     '<div class="concl ' + o.st + '"><b>' + esc(o.title) + '</b>' + (o.msg ? '　' + esc(o.msg) : '') +
     '　<span style="color:#737C82">（' + esc(o.mat || '未选材质') + ' 屈服 ' + f0(o.ysNom) + ' MPa；' + angTxt +
